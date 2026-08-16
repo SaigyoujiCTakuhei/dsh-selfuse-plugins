@@ -25,7 +25,7 @@
     }
   },
   "dependencies": {
-    "dsh-everything-plugin": "workspace:*",
-    "dsh-cost-meter-cny": "workspace:*"
+    "dsh-everything-plugin": "file:../dsh-everything-plugin",
+    "dsh-cost-meter-cny": "file:../dsh-cost-meter-cny"
   }
 }
