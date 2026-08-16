@@ -1,0 +1,10 @@
+# Aggregate bundle patch: mount every plugin in the dsh-selfuse-plugins repo.
+# Single installs stay available through each subpackage's own patch, e.g.
+#   dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin
+- insert:
+    - id: selfuse-plugins-all
+      name: 'dsh-selfuse-plugins-all'
+    - id: everything-search
+      name: 'dsh-everything-plugin'
+    - id: cost-meter-cny
+      name: 'dsh-cost-meter-cny'
