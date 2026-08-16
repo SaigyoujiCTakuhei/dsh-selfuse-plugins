@@ -25,7 +25,7 @@
     }
   },
   "dependencies": {
-    "dsh-everything-plugin": "github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin",
-    "dsh-cost-meter-cny": "github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny"
+    "dsh-everything-plugin": "workspace:*",
+    "dsh-cost-meter-cny": "workspace:*"
   }
 }
