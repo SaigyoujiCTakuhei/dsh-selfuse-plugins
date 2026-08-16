@@ -1,55 +1,48 @@
 # dsh-plugin-everything-search
 
-DSH 插件：通过 [voidtools Everything](https://www.voidtools.com/) 做**全盘索引级文件名/文件夹即时搜索**（Windows）。
+DSH 插件：通过 [voidtools Everything](https://www.voidtools.com/) 官方 SDK 做**全盘索引级文件名/文件夹即时搜索**（Windows）。
 
-向模型注册两个工具：
+只依赖运行中的 Everything 进程 + 随插件打包的 SDK DLL，**不需要** HTTP 服务器，**不需要** es.exe。
 
-- \`everything_search\` — 按文件名/路径即时搜索，返回路径、大小、修改时间。
-- \`everything_status\` — 探测当前后端是否可用。
+## 工具
 
-## 为什么是原生插件而不是 MCP
-
-Everything 的查询是高频、低延迟、只读的，原生工具直接走宿主进程，省掉 MCP 的 JSON-RPC 往返与类型转换补丁，并且拥有强类型出参（\`output.schema\`）与可回放的结果。
-
-## 后端
-
-| backend | 说明 | 前提 |
-| --- | --- | --- |
-| \`http\`（默认） | Everything 内置 HTTP 服务器 | Everything → Tools → Options → HTTP Server 勾选 **Enable HTTP server** |
-| \`es\` | 命令行 \`es.exe\` | 安装 [es.exe](https://www.voidtools.com/en-us/downloads/) 并配置 \`esPath\` |
+- \`everything_search\` — 即时搜索，返回完整路径、大小、修改时间。
+- \`everything_status\` — 探测 SDK 是否加载、版本、数据库是否就绪。
 
 ## 安装
 
-\`\`\`powershell
-dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-plugin-everything-search
-\`\`\`
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-plugin-everything-search
+
+## 前提
+
+- Windows，且 Everything 正在运行（托盘图标即可）。
+- 无需任何额外配置。
 
 ## 配置
 
-在 profile 的 \`cordis.patch.yml\` 中覆盖该 row 的 config：
+在 profile 的 cordis.patch.yml 覆盖 config：
 
-\`\`\`yaml
-- id: everything-search
-  config:
-    backend: http
-    httpBaseUrl: http://127.0.0.1:47805
-    esPath: es.exe
-    timeoutMs: 5000
-    maxResults: 10
-    announceToAgent: true
-\`\`\`
+    - id: everything-search
+      config:
+        enabled: true
+        maxResults: 20
+        sort: 1        # Everything SDK SortType，1 = 名称升序
+        announceToAgent: true
 
 ## 搜索语法
 
-\`everything_search\` 会把布尔参数翻译成 Everything 修饰符前缀：
+\`everything_search\` 支持 Everything 原生搜索语法，例如：
 
-- \`match_case\` → \`case:\`
-- \`match_whole_word\` → \`wholeword:\`
-- \`regex\` → \`regex:\`
-- \`match_path\` → \`path:\`
+- \`*.txt\`
+- \`foo bar\`（空格 = AND）
+- \`regex:^abc\`（配合 regex=true）
 
-例如 \`query="foo"\` + \`match_case=true\` 会查询 \`case:foo\`。
+布尔参数对应 SDK 开关：match_case / match_whole_word / match_path / regex。
 
-## License
+## 实现
 
-MIT
+宿主半边插件，通过 \`koffi\` FFI 加载随包附带的 Everything SDK DLL（Everything64.dll / Everything32.dll），调用 \`Everything_SetSearchW\` → \`Everything_QueryW\` → \`Everything_GetResult*\` 系列函数。SDK 与运行中的 Everything 进程通过 IPC 通信。
+
+## 致谢
+
+Everything SDK 版权归 voidtools（https://www.voidtools.com/）。SDK DLL 随包附带，遵循 Everything SDK 的使用条款。

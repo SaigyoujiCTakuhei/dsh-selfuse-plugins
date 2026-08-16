@@ -1,0 +1,6 @@
+This plugin bundles the Everything SDK DLLs (Everything32.dll / Everything64.dll)
+from voidtools (https://www.voidtools.com/). The SDK is free to use in
+applications; see the Everything SDK terms at voidtools.com.
+
+The FFI call patterns are modeled on the everytools Python package, which wraps
+the same Everything SDK.
