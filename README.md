@@ -1,4 +1,4 @@
-# dsh-plugin-everything-search
+# dsh-everything-plugin
 
 DSH 插件：通过 [voidtools Everything](https://www.voidtools.com/) 官方 SDK 做**全盘索引级文件名/文件夹即时搜索**（Windows）。
 
@@ -11,7 +11,7 @@ DSH 插件：通过 [voidtools Everything](https://www.voidtools.com/) 官方 SD
 
 ## 安装
 
-    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-plugin-everything-search
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-everything-plugin
 
 ## 前提
 

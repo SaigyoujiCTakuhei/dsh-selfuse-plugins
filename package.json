@@ -1,5 +1,5 @@
 {
-  "name": "dsh-plugin-everything-search",
+  "name": "dsh-everything-plugin",
   "version": "0.1.0",
   "description": "DSH plugin: instant indexed filename/folder search via the voidtools Everything SDK (Windows). Registers everything_search and everything_status tools.",
   "type": "module",
