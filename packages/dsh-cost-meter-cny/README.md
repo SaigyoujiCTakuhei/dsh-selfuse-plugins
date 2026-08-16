@@ -56,12 +56,16 @@ changes. A model without a models entry falls back to default.
 The package declares a dsh.bundle manifest, so 'dsh plugin add' installs it and
 adds it to the profile's bundle layers automatically:
 
-    dsh plugin --profile web add dsh-cost-meter-cny
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny
     # restart the web profile, then refresh the page
+
+Update to the latest commit:
+
+    dsh plugin --profile web update dsh-cost-meter-cny
 
 For a local checkout during development:
 
-    dsh plugin --profile web add file:/path/to/dsh-cost-meter-cny
+    dsh plugin --profile web add file:/path/to/dsh-selfuse-plugins/packages/dsh-cost-meter-cny
 
 NOTE: if you were using @steven-wu/dsh-cost-meter, remove it from the same
 profile first — both plugins render a cost badge and would double up.

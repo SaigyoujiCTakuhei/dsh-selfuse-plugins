@@ -11,7 +11,7 @@ DSH 插件：通过 [voidtools Everything](https://www.voidtools.com/) 官方 SD
 
 ## 安装
 
-    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-everything-plugin
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin
 
 ## 前提
 
