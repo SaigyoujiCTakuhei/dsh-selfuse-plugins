@@ -1,34 +1,12 @@
 {
-  "name": "dsh-everything-plugin",
-  "version": "0.1.0",
-  "description": "DSH plugin: instant indexed filename/folder search via the voidtools Everything SDK (Windows). Registers everything_search and everything_status tools.",
-  "type": "module",
-  "main": "lib/index.js",
-  "exports": {
-    ".": "./lib/index.js",
-    "./package.json": "./package.json"
+  "name": "dsh-selfuse-plugins",
+  "version": "1.0.0",
+  "private": true,
+  "description": "在 dsh 上自用的各种插件仓库。",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SaigyoujiCTakuhei/dsh-selfuse-plugins.git"
   },
-  "files": [
-    "lib",
-    "dll",
-    "cordis.patch.yml",
-    "README.md",
-    "NOTICE",
-    "LICENSE"
-  ],
-  "engines": {
-    "node": ">=22"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "@deepseek-ai/schemastery": "^3.18.0",
-    "koffi": "^3.0.0"
-  },
-  "license": "MIT"
+  "scripts": {}
 }

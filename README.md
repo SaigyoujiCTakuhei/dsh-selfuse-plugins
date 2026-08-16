@@ -1,48 +1,25 @@
-# dsh-everything-plugin
+# dsh-selfuse-plugins
 
-DSH 插件：通过 [voidtools Everything](https://www.voidtools.com/) 官方 SDK 做**全盘索引级文件名/文件夹即时搜索**（Windows）。
+在 dsh 上自用的各种插件仓库。
 
-只依赖运行中的 Everything 进程 + 随插件打包的 SDK DLL，**不需要** HTTP 服务器，**不需要** es.exe。
+## 插件列表
 
-## 工具
-
-- \`everything_search\` — 即时搜索，返回完整路径、大小、修改时间。
-- \`everything_status\` — 探测 SDK 是否加载、版本、数据库是否就绪。
+- packages/dsh-everything-plugin — 通过 voidtools Everything SDK 做即时文件名/目录搜索（Windows），注册 everything_search 与 everything_status 工具。
+- packages/dsh-cost-meter-cny — 实时 CNY 成本徽章（整会话 + 每回合），按北京时间峰谷双档计价，源自 DeepSeek 官方定价页。
 
 ## 安装
 
-    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-everything-plugin
+每个子包都是独立的 dsh 插件包，通过 pnpm 的 git 子目录语法安装：
 
-## 前提
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny
 
-- Windows，且 Everything 正在运行（托盘图标即可）。
-- 无需任何额外配置。
+安装后重启对应的 web profile 并刷新页面。
 
-## 配置
+## 结构
 
-在 profile 的 cordis.patch.yml 覆盖 config：
+这是一个 pnpm workspace monorepo：
 
-    - id: everything-search
-      config:
-        enabled: true
-        maxResults: 20
-        sort: 1        # Everything SDK SortType，1 = 名称升序
-        announceToAgent: true
-
-## 搜索语法
-
-\`everything_search\` 支持 Everything 原生搜索语法，例如：
-
-- \`*.txt\`
-- \`foo bar\`（空格 = AND）
-- \`regex:^abc\`（配合 regex=true）
-
-布尔参数对应 SDK 开关：match_case / match_whole_word / match_path / regex。
-
-## 实现
-
-宿主半边插件，通过 \`koffi\` FFI 加载随包附带的 Everything SDK DLL（Everything64.dll / Everything32.dll），调用 \`Everything_SetSearchW\` → \`Everything_QueryW\` → \`Everything_GetResult*\` 系列函数。SDK 与运行中的 Everything 进程通过 IPC 通信。
-
-## 致谢
-
-Everything SDK 版权归 voidtools（https://www.voidtools.com/）。SDK DLL 随包附带，遵循 Everything SDK 的使用条款。
+    packages/
+      dsh-everything-plugin/
+      dsh-cost-meter-cny/
