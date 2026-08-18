@@ -1,0 +1,6 @@
+# dsh-archive-panel bundle patch: one dual-face plugin row.
+# Host half = loopback-only unarchive route; browser half = sidebar archive panel.
+# Added / reconciled by `dsh plugin --profile <name> add <this-package>`.
+- insert:
+    - id: archive-panel
+      name: 'dsh-archive-panel'

@@ -1,6 +1,6 @@
 # dsh-everything-plugin bundle patch: inserts the host tool plugin row
 # into the profile roster. Install with:
-#   dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-everything-plugin
+#   dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin
 - insert:
     - id: everything-search
       name: 'dsh-everything-plugin'
