@@ -18,7 +18,7 @@
 
 import { existsSync, readFileSync, realpathSync, appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
@@ -160,8 +160,9 @@ function originOf(entry) {
   const root = dshAppRoot();
   const pkgDir = realPackageDirOf(name);
   if (root !== null && pkgDir !== null) {
-    const prefix = root.replace(/[\\/]+$/, "") + "\\";
-    return pkgDir.toLowerCase().startsWith(prefix.toLowerCase()) ? "builtin" : "third-party";
+    const prefix = root.replace(/[\\/]+$/, "");
+    const under = pkgDir === prefix || pkgDir.startsWith(prefix + sep);
+    return under ? "builtin" : "third-party";
   }
   return name.startsWith("@deepseek-ai/") ? "builtin" : "third-party";
 }
@@ -343,7 +344,8 @@ async function getUpdates(ctx) {
 
 function runPnpm(profileDir, args) {
   let lastError = null;
-  for (const bin of ["pnpm.cmd", "pnpm"]) {
+  const bins = process.platform === "win32" ? ["pnpm.cmd", "pnpm"] : ["pnpm"];
+  for (const bin of bins) {
     try {
       return spawnSync(bin, args, {
         cwd: profileDir,
@@ -394,8 +396,13 @@ function scheduleRestart(res) {
   } catch {
     // logging is best-effort
   }
+  const isWin = process.platform === "win32";
+  const shell = isWin ? "cmd.exe" : "/bin/sh";
+  const script = isWin
+    ? 'ping -n 6 127.0.0.1 >nul & dsh web >> "' + logPath + '" 2>&1'
+    : 'sleep 6; dsh web >> "' + logPath + '" 2>&1';
   try {
-    const child = spawn("cmd.exe", ["/d", "/c", "ping -n 6 127.0.0.1 >nul & dsh web >> \"" + logPath + "\" 2>&1"], {
+    const child = spawn(shell, isWin ? ["/d", "/c", script] : ["-c", script], {
       detached: true,
       stdio: "ignore",
       windowsHide: true
@@ -522,4 +529,4 @@ export function apply(ctx) {
 export { inject };
 
 // Test seams (read-only helpers exercised by the dev harness).
-export const _test = { profileDirOf, updateTargets, lockfileBlock, compareVersions, checkTarget };
+export const _test = { profileDirOf, updateTargets, lockfileBlock, compareVersions, checkTarget, originOf };

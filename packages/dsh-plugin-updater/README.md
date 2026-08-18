@@ -47,6 +47,21 @@ DSH Web GUI 插件管理器：把「设置 > 插件」里的单一插件列表�
 
     "dsh-plugin-updater": "github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-plugin-updater"
 
+## 跨平台
+
+Windows 与 Linux 均可运行，相关代码按平台分支：
+
+- 内置/第三方分类使用 `path.sep` 拼接前缀（Windows 反斜杠 / Linux 正斜杠），
+  realpath 同样能穿透 Linux 上 pnpm 对内置包创建的符号链接；
+- 页面内「重启服务器」在 Windows 用 `cmd /c ping -n 6` 延时拉起，
+  在 Linux 用 `/bin/sh -c 'sleep 6'`；
+- `pnpm` 可执行文件按平台选择（Windows 优先 `pnpm.cmd`，Linux 直接 `pnpm`）；
+- profile 路径取自 `ctx.baseUrl` 或 `$DSH_HOME/profiles/web`（默认 `~/.dsh`），
+  两端一致。
+
+注意：本仓库里的 `dsh-everything-plugin` 依赖 Windows Everything SDK，
+在 Linux 上它自身的工具调用会报错（与插件管理器无关）；其余各插件跨平台。
+
 ## 验证
 
     dsh --profile web --dump-config | grep -E "plugin-updater|ui-settings-plugin-inventory"
