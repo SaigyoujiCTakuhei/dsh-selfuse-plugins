@@ -19,6 +19,7 @@
 | --- | --- |
 | dsh-everything-plugin | 全盘索引级文件名/文件夹即时搜索（Windows） |
 | dsh-cost-meter-cny | 峰谷双档 ¥ 成本徽章（整会话 + 每回合） |
+| dsh-archive-panel | 侧边栏归档面板：列出已归档会话并可一键恢复 |
 
 ## 插件列表
 
@@ -40,6 +41,15 @@
 
 详情见 [packages/dsh-cost-meter-cny/README.md](packages/dsh-cost-meter-cny/README.md)。
 
+### dsh-archive-panel
+
+Web GUI 侧边栏的归档面板：列出已归档会话并支持一键恢复（unarchive）。
+
+- host 半注册一个仅限 loopback 的 HTTP 路由 `/api/dsh-archive/unarchive`，幂等地把会话从工作区注册表的归档集合中移除（恢复）；通过注册表自身的序列化写路径保持一致，事件会自然推送到浏览器。
+- client 半在侧边栏底部注入「归档」入口，弹窗列出已归档会话（标题 + 所属工作区），支持「仅恢复」或「恢复并打开」。
+
+详情见 [packages/dsh-archive-panel/README.md](packages/dsh-archive-panel/README.md)。
+
 ## 快速开始
 
 前置条件：Windows（Everything 插件需要 Everything 正在运行）、官方 `dsh` CLI、`pnpm`。
@@ -48,14 +58,15 @@
 
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel
 
 一次装齐（`dsh plugin add` 转发给 `pnpm add`，支持多包）：
 
-    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel
 
 更新到最新：
 
-    dsh plugin --profile web update dsh-everything-plugin dsh-cost-meter-cny
+    dsh plugin --profile web update dsh-everything-plugin dsh-cost-meter-cny dsh-archive-panel
 
 卸载：
 
@@ -68,6 +79,7 @@
     packages/
       dsh-everything-plugin/    # Everything 搜索
       dsh-cost-meter-cny/       # 峰谷双档成本徽章
+      dsh-archive-panel/        # 归档面板
 
 每个子包都是独立的 dsh 插件包（`dsh.bundle` + 可选 `dsh.client`），通过 `#path:` 语法从本仓库单独引用。
 
