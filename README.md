@@ -13,7 +13,7 @@
 
 ## 是什么
 
-这个仓库收集我在 dsh 上自用的插件。所有插件都走官方 profile 机制挂载到 `dsh web`，不改 dsh 源码；可以逐个安装，也可以一条命令装齐。
+这个仓库收集我在 dsh 上自用的插件。所有插件都走官方 profile 机制挂载到 `dsh web`，不改 dsh 源码；可以逐个安装，也可以一条命令装齐。插件的安装 / 检查更新 / 卸载由官方 `@linxin666/dsh-client-ui-plugin-manager`（设置 › 插件的 Plugin manager 标签页）负责，本仓库只提供下面的功能型插件。
 
 | 插件 | 作用 |
 | --- | --- |
@@ -62,7 +62,7 @@ Web GUI 会话头部的上下文压缩状态徽章：把 dsh 自动/手动压缩
 
 ## 快速开始
 
-前置条件：Windows（Everything 插件需要 Everything 正在运行）、官方 `dsh` CLI、`pnpm`。
+前置条件：官方 `dsh` CLI、`pnpm`；其中 `dsh-everything-plugin` 仅支持 Windows，且需要本机正在运行 voidtools Everything。
 
 单个安装：
 
