@@ -85,15 +85,33 @@ function ensureUnarchive(registry) {
 }
 
 async function deleteSessionPermanently(ctx, sessionId) {
-  // Refuse to delete a session that is still live (a running agent owns it).
-  let live;
-  try {
-    const sessions = ctx.get("sessions");
-    live = sessions && typeof sessions.get === "function" ? sessions.get(sessionId) : undefined;
-  } catch {
-    live = undefined;
+  // An archived session has been explicitly set aside by the user and is the
+  // ONLY thing this panel offers to delete, so it must always be deletable —
+  // even though the runtime may still hold a (typically idle) agent reference
+  // for it. Archiving does not tear the agent down, so testing liveness against
+  // ctx.agents would wrongly block archived deletions with the "正在运行" error.
+  // We therefore skip the liveness guard for archived sessions entirely, and
+  // only refuse deletion for a NON-archived session that is genuinely running.
+  const archivedSessionIds = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
+    ? ctx.workspaceRegistry.archivedSessionIds
+    : [];
+  const isArchived = archivedSessionIds.includes(sessionId);
+
+  if (!isArchived) {
+    // Refuse to delete a session that is still live (a running agent owns it).
+    // Use the LIVE-AGENT registry (ctx.agents), not the in-memory session store
+    // (ctx.sessions): the latter keeps a Session record for every loaded session,
+    // so it cannot distinguish "running" from "merely loaded". ctx.agents.get
+    // returns an agent only while one is genuinely bound to this sessionId.
+    let live;
+    try {
+      const agents = ctx.get("agents");
+      live = agents && typeof agents.get === "function" ? agents.get(sessionId) : undefined;
+    } catch {
+      live = undefined;
+    }
+    if (live !== undefined) throw new SessionLiveError(sessionId);
   }
-  if (live !== undefined) throw new SessionLiveError(sessionId);
 
   // 1) Remove from the archived set (keeps registry/domain in sync).
   await ctx.workspaceRegistry.unarchiveSession(sessionId);
@@ -128,6 +146,27 @@ async function deleteSessionPermanently(ctx, sessionId) {
   if (registry.headers && typeof registry.headers.delete === "function") registry.headers.delete(sessionId);
   if (registry.sessionPaths && typeof registry.sessionPaths.delete === "function") registry.sessionPaths.delete(sessionId);
   if (registry.invalidSessionPaths && typeof registry.invalidSessionPaths.delete === "function") registry.invalidSessionPaths.delete(sessionId);
+
+  // 5) Evict from the in-memory session store so the left workspace bar stops
+  // showing the session. The store exposes NO public remove-by-id API — its only
+  // eviction path is the private `enter` disposer. We replicate that effect:
+  // drop the record and emit `session/disposed` (the api-proxy forwards it as
+  // `host/session-removed`, which makes the client drop the row). Guarded so a
+  // future dsh internal change can never turn an otherwise-successful delete
+  // into an error.
+  try {
+    const sessions = ctx.get("sessions");
+    if (sessions && typeof sessions.get === "function") {
+      const session = sessions.get(sessionId);
+      const store = sessions.store;
+      if (store && typeof store.delete === "function") store.delete(sessionId);
+      if (session !== undefined) {
+        try { ctx.emit("session/disposed", session); } catch { /* best effort */ }
+      }
+    }
+  } catch {
+    /* best effort: the data-layer deletion above already succeeded */
+  }
 
   return { removed, warnings };
 }
