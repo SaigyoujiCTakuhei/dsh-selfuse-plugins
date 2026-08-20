@@ -20,6 +20,7 @@
 | dsh-everything-plugin | 全盘索引级文件名/文件夹即时搜索（Windows） |
 | dsh-cost-meter-cny | 峰谷双档 ¥ 成本徽章（整会话 + 每回合） |
 | dsh-archive-panel | 侧边栏归档面板：列出已归档会话并可一键恢复 |
+| dsh-context-compression-status | 会话头部上下文压缩状态徽章（上限 / 用量 / 是否压缩 / 次数） |
 
 ## 插件列表
 
@@ -50,6 +51,15 @@ Web GUI 侧边栏的归档面板：列出已归档会话并支持一键恢复（
 
 详情见 [packages/dsh-archive-panel/README.md](packages/dsh-archive-panel/README.md)。
 
+### dsh-context-compression-status
+
+Web GUI 会话头部的上下文压缩状态徽章：把 dsh 自动/手动压缩（compaction）的隐藏状态直观暴露出来。
+
+- host 半在会话投影接缝注册 `contextCompaction` 单元，折叠日志统计成功的 `compaction/summary` 次数与最近一次细节。
+- client 半在 `conversation.session.header.utilities` 槽位注册徽章，读取核心 `contextPressure` 投影（上下文上限与当前用量）与 `contextCompaction` 投影（是否压缩、压缩几次），hover 显示完整明细。
+
+详情见 [packages/dsh-context-compression-status/README.md](packages/dsh-context-compression-status/README.md)。
+
 ## 快速开始
 
 前置条件：Windows（Everything 插件需要 Everything 正在运行）、官方 `dsh` CLI、`pnpm`。
@@ -59,14 +69,15 @@ Web GUI 侧边栏的归档面板：列出已归档会话并支持一键恢复（
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-context-compression-status
 
 一次装齐（`dsh plugin add` 转发给 `pnpm add`，支持多包）：
 
-    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-context-compression-status
 
 更新到最新：
 
-    dsh plugin --profile web update dsh-everything-plugin dsh-cost-meter-cny dsh-archive-panel
+    dsh plugin --profile web update dsh-everything-plugin dsh-cost-meter-cny dsh-archive-panel dsh-context-compression-status
 
 卸载：
 
@@ -80,6 +91,7 @@ Web GUI 侧边栏的归档面板：列出已归档会话并支持一键恢复（
       dsh-everything-plugin/    # Everything 搜索
       dsh-cost-meter-cny/       # 峰谷双档成本徽章
       dsh-archive-panel/        # 归档面板
+      dsh-context-compression-status/  # 上下文压缩状态徽章
 
 每个子包都是独立的 dsh 插件包（`dsh.bundle` + 可选 `dsh.client`），通过 `#path:` 语法从本仓库单独引用。
 
