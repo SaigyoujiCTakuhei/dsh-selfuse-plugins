@@ -86,6 +86,14 @@ It is a dual-face dsh.client package:
   with the per-bucket breakdown (input / output / cache-read / cache-write),
   the active tier, and the session total.
 
+  Each badge also shows a **live peak/off-peak pill** next to the cost label
+  (e.g. `¥0.12  ●高峰` or `¥0.12  ●闲时`). Unlike the tooltip's `tier` line —
+  which reflects the tier active at the *last priced usage event* — the pill
+  reflects the *current wall-clock moment* in the pricing timezone
+  (`Asia/Shanghai` by default). It re-checks every 30 s, so it flips over at the
+  hour boundary even with no new activity. The pill is colored (red for peak,
+  green for off-peak) and shows a `现在 高峰/闲时 (实时)` line in the tooltip.
+
 The sessionCostCny projection is delivered through the same seam as tokenUsage /
 sessionStats, so it also appears in every projection carrier (history tail page,
 session/projection push frames) without extra wiring.
