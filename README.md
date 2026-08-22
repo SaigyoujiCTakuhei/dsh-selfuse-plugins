@@ -55,8 +55,9 @@ Web GUI 侧边栏的归档面板：列出已归档会话并支持一键恢复（
 
 Web GUI 会话头部的上下文压缩状态徽章：把 dsh 自动/手动压缩（compaction）的隐藏状态直观暴露出来。
 
-- host 半在会话投影接缝注册 `contextCompaction` 单元，折叠日志统计成功的 `compaction/summary` 次数与最近一次细节。
-- client 半在 `conversation.session.header.utilities` 槽位注册徽章，读取核心 `contextPressure` 投影（上下文上限与当前用量）与 `contextCompaction` 投影（是否压缩、压缩几次），hover 显示完整明细。
+- host 半在会话投影接缝注册 `contextCompaction` 单元，折叠日志统计成功的 `compaction/summary` 次数与最近一次细节；并额外注册一个仅限 loopback 的 HTTP 路由 `/api/dsh-context-compression/status?sessionId=...`，把该值暴露给浏览器。原因：`dsh-client-connection` 只会把一组固定的核心投影键（如 `contextPressure`/`tokenUsage`）下发到前端，自定义投影键不会转发，所以不能用 `useProjection` 直接读到 `contextCompaction`。
+- client 半在 `conversation.session.header.utilities` 槽位注册徽章：上下文上限与当前用量读核心 `contextPressure` 投影（实时）；压缩状态/次数通过上面的 HTTP 路由按会话轮询（每 3 秒）获取，hover 显示完整明细（上限 / 用量 / 是否压缩 / 次数 / 最近一次压缩缩减量）。
+- 注意：HTTP 路由由 host 半在 `dsh web` 启动时注册，**改完代码后必须重启 `dsh web`** 路由才会生效（client 半按需从源码加载，刷新页面即可）。修过一个早期 bug——最初想直接 `useProjection("contextCompaction")`，但自定义投影键不下发，徽章会一直显示「未压缩」，现已改用路由轮询。
 
 详情见 [packages/dsh-context-compression-status/README.md](packages/dsh-context-compression-status/README.md)。
 

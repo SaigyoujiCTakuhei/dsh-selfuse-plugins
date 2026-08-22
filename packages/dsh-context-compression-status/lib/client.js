@@ -28,28 +28,57 @@ window.__ModuleLoader__.load({
       return String(Math.round(n));
     }
 
+    var ROUTE = "/api/dsh-context-compression/status";
+
+    // Pull the authoritative compaction status from the host loopback route.
+    // The custom session projection is computed on the host but, unlike the
+    // core projections, is NOT forwarded to the client by dsh-client-connection,
+    // so we fetch it over HTTP (same origin, loopback-only on the server).
+    function fetchStatus(sessionId) {
+      return fetch(ROUTE + "?sessionId=" + encodeURIComponent(sessionId), { cache: "no-store" })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (j) {
+          return j && j.ok ? j : null;
+        })
+        .catch(function () {
+          return null;
+        });
+    }
+
     // Presentational badge with a fixed-position hover tooltip showing the full
     // context-compression status: limit, usage, compressed flag, and count.
     function StatusChip(props) {
-      var hoverState = react.useState(false);
-      var hover = hoverState[0];
-      var setHover = hoverState[1];
-      var posState = react.useState(null);
-      var pos = posState[0];
-      var setPos = posState[1];
-
-      function onEnter(ev) {
-        var r = ev.currentTarget.getBoundingClientRect();
-        setPos({ top: r.bottom + 6, left: r.left });
-        setHover(true);
-      }
-      function onLeave() {
-        setHover(false);
-      }
-
       var useProjection = props.useProjection;
+      var useSession = props.useSession;
+      var sessionId = useSession ? useSession(function (s) { return s.sessionId; }) : void 0;
+
       var pressure = useProjection ? useProjection("contextPressure") : void 0;
-      var comp = useProjection ? useProjection("contextCompaction") : void 0;
+
+      // Fetched compaction status (authoritative count). Polls while mounted.
+      var compState = react.useState(null);
+      var comp = compState[0];
+      var setComp = compState[1];
+
+      react.useEffect(
+        function () {
+          if (typeof sessionId !== "string" || sessionId === "") return;
+          var alive = true;
+          function tick() {
+            fetchStatus(sessionId).then(function (v) {
+              if (alive && v) setComp(v);
+            });
+          }
+          tick();
+          var id = setInterval(tick, 3000);
+          return function () {
+            alive = false;
+            clearInterval(id);
+          };
+        },
+        [sessionId],
+      );
 
       var contextWindow =
         pressure && typeof pressure.contextWindow === "number" ? pressure.contextWindow : null;
@@ -77,6 +106,22 @@ window.__ModuleLoader__.load({
         lines.push("最近一次压缩: 缩减 ~" + shadow + " tokens" + (lc.model ? " · " + lc.model : ""));
       }
 
+      var hoverState = react.useState(false);
+      var hover = hoverState[0];
+      var setHover = hoverState[1];
+      var posState = react.useState(null);
+      var pos = posState[0];
+      var setPos = posState[1];
+
+      function onEnter(ev) {
+        var r = ev.currentTarget.getBoundingClientRect();
+        setPos({ top: r.bottom + 6, left: r.left });
+        setHover(true);
+      }
+      function onLeave() {
+        setHover(false);
+      }
+
       var tip =
         hover && pos
           ? react.createElement(
@@ -98,7 +143,8 @@ window.__ModuleLoader__.load({
     var inject = ["slots"];
 
     // Register a persistent badge in the conversation session header, next to the
-    // existing context meter. The slot hands the component `useProjection`.
+    // existing context meter. The slot hands the component `useProjection` and
+    // `useSession`.
     function apply(ctx) {
       ctx.slots.inject("conversation.session.header.utilities", () => {
         ctx.slots.register(
