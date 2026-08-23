@@ -13,6 +13,7 @@ import { dirname } from "node:path";
 
 const UNARCHIVE_PATH = "/api/dsh-archive/unarchive";
 const DELETE_PATH = "/api/dsh-archive/delete";
+const META_PATH = "/api/dsh-archive/meta";
 const MAX_BODY_BYTES = 64 * 1024;
 
 const inject = ["webServer", "workspaceRegistry", "sessionPersistence"];
@@ -171,6 +172,34 @@ async function deleteSessionPermanently(ctx, sessionId) {
   return { removed, warnings };
 }
 
+function makeMetaHandler(ctx) {
+  return async (req, res) => {
+    if (req.method !== "GET") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
+    if (!isLoopbackRequest(req)) { writeJson(res, 403, { ok: false, error: "forbidden: loopback-only" }); return; }
+    try {
+      const archived = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
+        ? [...ctx.workspaceRegistry.archivedSessionIds]
+        : [];
+      let headers = [];
+      try { headers = await ctx.sessionPersistence.list(); } catch { headers = []; }
+      const byId = new Map();
+      for (const header of headers) {
+        if (header && typeof header.id === "string") byId.set(header.id, header);
+      }
+      const items = archived.map((id) => {
+        const header = byId.get(id);
+        return {
+          id,
+          createdAt: header && typeof header.createdAt === "number" ? header.createdAt : 0
+        };
+      });
+      writeJson(res, 200, { ok: true, items });
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+}
+
 function makeUnarchiveHandler(ctx) {
   return async (req, res) => {
     if (req.method !== "POST") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
@@ -212,7 +241,8 @@ function apply(ctx) {
   ctx.effect(() => {
     const disposers = [
       ctx.webServer.register({ kind: "exact", path: UNARCHIVE_PATH, handler: makeUnarchiveHandler(ctx) }),
-      ctx.webServer.register({ kind: "exact", path: DELETE_PATH, handler: makeDeleteHandler(ctx) })
+      ctx.webServer.register({ kind: "exact", path: DELETE_PATH, handler: makeDeleteHandler(ctx) }),
+      ctx.webServer.register({ kind: "exact", path: META_PATH, handler: makeMetaHandler(ctx) })
     ];
     return () => {
       for (const dispose of disposers) dispose();

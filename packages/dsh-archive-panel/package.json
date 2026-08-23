@@ -1,7 +1,7 @@
 {
   "name": "dsh-archive-panel",
   "description": "DSH Web GUI archive area: lists archived sessions in the sidebar, restores (unarchives) or permanently deletes them.",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",

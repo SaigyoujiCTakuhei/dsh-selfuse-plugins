@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
     let React = require("react");
     let ReactDOM = require("react-dom");
 
-    const CSS = ".dap-trigger{position:relative;box-sizing:border-box;display:flex;align-items:center;gap:6px;width:100%;height:36px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#5b5f66);cursor:pointer;font:inherit;font-size:13px;padding:0 8px}\n.dap-trigger:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05));color:var(--dsw-alias-label-primary,#111418)}\n.dap-trigger[data-wide=rail]{width:36px;justify-content:center;padding:0;margin:0 auto}\n.dap-triggerLabel{flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.dap-badge{flex:none;min-width:16px;height:16px;line-height:16px;border-radius:8px;background:var(--dsw-static-deepseek-500,#4176e6);color:#fff;font-size:10px;font-weight:600;padding:0 5px;box-sizing:border-box;text-align:center}\n.dap-trigger[data-wide=rail] .dap-badge{position:absolute;right:-4px;top:-4px;min-width:15px;height:15px;line-height:15px;padding:0 3px}\n.dap-overlay{position:fixed;inset:0;z-index:2100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);padding:24px}\n.dap-modal{width:520px;max-width:100%;max-height:72vh;display:flex;flex-direction:column;background:var(--dsw-specific-menu,var(--dsw-alias-bg-overlay,#fff));border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.08));border-radius:16px;box-shadow:var(--dsw-shadow-lv3,0 12px 32px rgba(0,0,0,.2));overflow:hidden}\n.dap-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.06))}\n.dap-title{margin:0;font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary,#111418)}\n.dap-close{width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-label-secondary,#5b5f66);cursor:pointer;font-size:18px;line-height:1;flex:none}\n.dap-close:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05))}\n.dap-body{padding:8px;overflow:auto;display:flex;flex-direction:column;gap:4px}\n.dap-empty{margin:0;padding:28px 12px;text-align:center;color:var(--dsw-alias-label-tertiary,#8a9099);font-size:13px}\n.dap-row{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px}\n.dap-row:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.04))}\n.dap-rowMain{flex:1;min-width:0}\n.dap-rowTitle{font-size:13px;font-weight:500;color:var(--dsw-alias-label-primary,#111418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.dap-rowMeta{font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}\n.dap-rowActions{flex:none;display:flex;gap:6px}\n.dap-btn{appearance:none;border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-primary,#111418);border-radius:8px;padding:5px 8px;font:inherit;font-size:12px;cursor:pointer;line-height:1.4;white-space:nowrap}\n.dap-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05))}\n.dap-btn:disabled{opacity:.5;cursor:default}\n.dap-btnPrimary{background:var(--dsw-static-deepseek-500,#4176e6);border-color:transparent;color:#fff}\n.dap-btnPrimary:hover{background:var(--dsw-alias-state-business-primary,#3565c9)}\n.dap-btnDanger{color:var(--dsw-alias-label-error,#d33);border-color:rgba(220,60,60,.35)}\n.dap-btnDanger:hover{background:rgba(220,60,60,.08)}\n.dap-btnArm{background:rgba(220,60,60,.14);border-color:rgba(220,60,60,.55);font-weight:600}\n.dap-hint{margin:0;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.06));color:var(--dsw-alias-label-tertiary,#8a9099);font-size:12px;line-height:1.5}\n.dap-error{margin:8px 0 0;padding:8px 12px;border-radius:8px;background:rgba(220,60,60,.12);color:var(--dsw-alias-label-error,#d33);font-size:12px}";
+    const CSS = ".dap-trigger{position:relative;box-sizing:border-box;display:flex;align-items:center;gap:6px;width:100%;height:36px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#5b5f66);cursor:pointer;font:inherit;font-size:13px;padding:0 8px}\n.dap-trigger:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05));color:var(--dsw-alias-label-primary,#111418)}\n.dap-trigger[data-wide=rail]{width:36px;justify-content:center;padding:0;margin:0 auto}\n.dap-triggerLabel{flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.dap-badge{flex:none;min-width:16px;height:16px;line-height:16px;border-radius:8px;background:var(--dsw-static-deepseek-500,#4176e6);color:#fff;font-size:10px;font-weight:600;padding:0 5px;box-sizing:border-box;text-align:center}\n.dap-trigger[data-wide=rail] .dap-badge{position:absolute;right:-4px;top:-4px;min-width:15px;height:15px;line-height:15px;padding:0 3px}\n.dap-overlay{position:fixed;inset:0;z-index:2100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);padding:24px}\n.dap-modal{width:520px;max-width:100%;max-height:72vh;display:flex;flex-direction:column;background:var(--dsw-specific-menu,var(--dsw-alias-bg-overlay,#fff));border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.08));border-radius:16px;box-shadow:var(--dsw-shadow-lv3,0 12px 32px rgba(0,0,0,.2));overflow:hidden}\n.dap-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.06))}\n.dap-title{margin:0;font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary,#111418)}\n.dap-close{width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-label-secondary,#5b5f66);cursor:pointer;font-size:18px;line-height:1;flex:none}\n.dap-close:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05))}\n.dap-body{padding:8px;overflow:auto;display:flex;flex-direction:column;gap:4px}\n.dap-empty{margin:0;padding:28px 12px;text-align:center;color:var(--dsw-alias-label-tertiary,#8a9099);font-size:13px}\n.dap-row{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px}\n.dap-row:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.04))}\n.dap-rowMain{flex:1;min-width:0}\n.dap-rowTitle{font-size:13px;font-weight:500;color:var(--dsw-alias-label-primary,#111418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.dap-rowMeta{font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}\n.dap-rowActions{flex:none;display:flex;gap:6px}\n.dap-btn{appearance:none;border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-primary,#111418);border-radius:8px;padding:5px 8px;font:inherit;font-size:12px;cursor:pointer;line-height:1.4;white-space:nowrap}\n.dap-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05))}\n.dap-btn:disabled{opacity:.5;cursor:default}\n.dap-btnPrimary{background:var(--dsw-static-deepseek-500,#4176e6);border-color:transparent;color:#fff}\n.dap-btnPrimary:hover{background:var(--dsw-alias-state-business-primary,#3565c9)}\n.dap-btnDanger{color:var(--dsw-alias-label-error,#d33);border-color:rgba(220,60,60,.35)}\n.dap-btnDanger:hover{background:rgba(220,60,60,.08)}\n.dap-btnArm{background:rgba(220,60,60,.14);border-color:rgba(220,60,60,.55);font-weight:600}\n.dap-hint{margin:0;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.06));color:var(--dsw-alias-label-tertiary,#8a9099);font-size:12px;line-height:1.5}\n.dap-error{margin:8px 0 0;padding:8px 12px;border-radius:8px;background:rgba(220,60,60,.12);color:var(--dsw-alias-label-error,#d33);font-size:12px}\n.dap-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.06))}\n.dap-toolLabel{flex:none;font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099)}\n.dap-chips{display:flex;gap:4px;flex-wrap:wrap}\n.dap-chip{appearance:none;border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-primary,#111418);border-radius:999px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;line-height:1.4;white-space:nowrap}\n.dap-chip:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05))}\n.dap-chipActive{background:var(--dsw-static-deepseek-500,#4176e6);border-color:transparent;color:#fff}\n.dap-chipActive:hover{background:var(--dsw-alias-state-business-primary,#3565c9)}\n.dap-dirBtn{appearance:none;margin-left:auto;border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-primary,#111418);border-radius:8px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;line-height:1.4;white-space:nowrap}\n.dap-dirBtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05))}";
     const CSS_TAG_ID = "dsh-archive-panel/style.css";
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(CSS_TAG_ID) + "]") === null) {
       const tag = document.createElement("style");
@@ -49,6 +49,22 @@ window.__ModuleLoader__.load({
       const unarchive = (sessionId) => post("/api/dsh-archive/unarchive", sessionId);
       const deleteSession = (sessionId) => post("/api/dsh-archive/delete", sessionId);
 
+      const fetchMeta = async () => {
+        try {
+          const response = await fetch("/api/dsh-archive/meta", { method: "GET" });
+          let body = null;
+          try { body = await response.json(); } catch { body = null; }
+          if (response.ok && body && Array.isArray(body.items)) {
+            const map = {};
+            for (const item of body.items) {
+              if (item && typeof item.id === "string") map[item.id] = item.createdAt;
+            }
+            return map;
+          }
+        } catch { /* best effort */ }
+        return {};
+      };
+
       const waitUntilUnarchived = async (sessionId, timeoutMs) => {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
@@ -59,32 +75,89 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const archivedIdsKey = (ws) => {
+        const archivedIds = Array.isArray(ws.archivedSessionIds) ? ws.archivedSessionIds : [];
+        return archivedIds.join("|");
+      };
+
+      const SORT_STORAGE_KEY = "dsh-archive-panel:sort";
+      const SORT_KEY_VALUES = ["archived", "time", "name", "date"];
+      const loadSortPref = () => {
+        try {
+          const raw = window.localStorage.getItem(SORT_STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            const key = SORT_KEY_VALUES.indexOf(parsed.key) !== -1 ? parsed.key : "archived";
+            const dir = parsed.dir === "asc" || parsed.dir === "desc" ? parsed.dir : "desc";
+            return { key, dir };
+          }
+        } catch { /* ignore corrupt storage */ }
+        return null;
+      };
+      const saveSortPref = (key, dir) => {
+        try {
+          window.localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ key, dir }));
+        } catch { /* storage may be unavailable; ignore */ }
+      };
+
       function ArchiveModal(props) {
         const ws = useWorkspaces();
         const ss = useSessions();
         const [busy, setBusy] = React.useState(null);
         const [error, setError] = React.useState(null);
         const [arm, setArm] = React.useState(null);
+        const [meta, setMeta] = React.useState({});
+        const savedSort = loadSortPref();
+        const [sortKey, setSortKey] = React.useState(savedSort ? savedSort.key : "archived");
+        const [sortDir, setSortDir] = React.useState(savedSort ? savedSort.dir : "desc");
+        const metaKey = archivedIdsKey(ws);
+        React.useEffect(() => {
+          let cancelled = false;
+          (async () => {
+            const map = await fetchMeta();
+            if (!cancelled) setMeta(map);
+          })();
+          return () => { cancelled = true; };
+        }, [metaKey]);
+        React.useEffect(() => {
+          saveSortPref(sortKey, sortDir);
+        }, [sortKey, sortDir]);
 
         const archivedIds = Array.isArray(ws.archivedSessionIds) ? ws.archivedSessionIds : [];
         const items = Array.isArray(ws.items) ? ws.items : [];
         const byId = ss.byId || {};
+        const metaMap = meta || {};
 
-        const rows = archivedIds.map((id) => {
-          const summary = byId[id] || {};
-          let workspaceTitle = "";
-          for (const w of items) {
-            if (w && Array.isArray(w.sessionIds) && w.sessionIds.indexOf(id) !== -1) {
-              workspaceTitle = typeof w.title === "string" ? w.title : "";
-              break;
+        const SORT_KEYS = ["archived", "time", "name", "date"];
+        const SORT_LABELS = { archived: "归档顺序", time: "时间", name: "名称", date: "日期" };
+        const compareRows = (a, b) => {
+          if (sortKey === "time") return (a.updatedAt || 0) - (b.updatedAt || 0);
+          if (sortKey === "date") return (a.createdAt || 0) - (b.createdAt || 0);
+          if (sortKey === "name") return String(a.title).localeCompare(String(b.title), "zh");
+          return a.index - b.index; // archived: natural array order (oldest first)
+        };
+
+        const rows = archivedIds
+          .map((id, index) => {
+            const summary = byId[id] || {};
+            let workspaceTitle = "";
+            for (const w of items) {
+              if (w && Array.isArray(w.sessionIds) && w.sessionIds.indexOf(id) !== -1) {
+                workspaceTitle = typeof w.title === "string" ? w.title : "";
+                break;
+              }
             }
-          }
-          return {
-            id: id,
-            title: summary.displayTitle || summary.title || id,
-            workspaceTitle: workspaceTitle
-          };
-        });
+            return {
+              id: id,
+              index: index,
+              title: summary.displayTitle || summary.title || id,
+              workspaceTitle: workspaceTitle,
+              createdAt: typeof metaMap[id] === "number" ? metaMap[id] : 0,
+              updatedAt: typeof summary.updatedAt === "number" ? summary.updatedAt : 0
+            };
+          })
+          .sort((a, b) => (sortDir === "asc" ? compareRows(a, b) : -compareRows(a, b)));
 
         const doRestore = async (id, andOpen) => {
           setBusy(id);
@@ -133,6 +206,25 @@ window.__ModuleLoader__.load({
                 React.createElement("h2", { className: "dap-title" }, "归档会话"),
                 React.createElement("button", { type: "button", className: "dap-close", "aria-label": "关闭", onClick: props.onClose }, "×")
               ),
+              rows.length > 0
+                ? React.createElement("div", { className: "dap-toolbar" },
+                    React.createElement("span", { className: "dap-toolLabel" }, "排序"),
+                    React.createElement("div", { className: "dap-chips" },
+                      SORT_KEYS.map((key) => React.createElement("button", {
+                        type: "button",
+                        key: key,
+                        className: "dap-chip" + (sortKey === key ? " dap-chipActive" : ""),
+                        onClick: () => setSortKey(key)
+                      }, SORT_LABELS[key]))
+                    ),
+                    React.createElement("button", {
+                      type: "button",
+                      className: "dap-dirBtn",
+                      title: sortDir === "asc" ? "当前：正序（旧→新 / A→Z）" : "当前：倒序（新→旧 / Z→A）",
+                      onClick: () => setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+                    }, sortDir === "asc" ? "正序 ↑" : "倒序 ↓")
+                  )
+                : null,
               React.createElement("div", { className: "dap-body" },
                 rows.length === 0
                   ? React.createElement("p", { className: "dap-empty" }, "没有归档的会话。")
