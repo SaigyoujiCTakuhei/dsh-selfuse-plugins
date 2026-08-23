@@ -207,7 +207,6 @@ function makeProjection(pricing) {
 
   return {
     key: "sessionCostCny",
-    schema: sessionCostSchema,
     init: () => ({
       totals: zeroBuckets(),
       cny: zeroCny(),
@@ -276,19 +275,22 @@ function makeProjection(pricing) {
         priced: state.priced || anyUsage,
       };
     },
-    view: (state) => ({
-      ...bucketsView(state.totals, state.cny),
-      provider: state.provider,
-      model: state.model,
-      tier: state.tier,
-      priced: state.priced,
-      currency: pricing.currency,
-      timezone: pricing.timezone,
-      peakHours: pricing.peakHours,
-      byTurn: Object.fromEntries(
-        Object.entries(state.byTurn).map(([turn, t]) => [turn, { ...bucketsView(t.buckets, t.cny), tier: t.tier }]),
-      ),
-    }),
+    wire: {
+      viewSchema: sessionCostSchema,
+      view: (state) => ({
+        ...bucketsView(state.totals, state.cny),
+        provider: state.provider,
+        model: state.model,
+        tier: state.tier,
+        priced: state.priced,
+        currency: pricing.currency,
+        timezone: pricing.timezone,
+        peakHours: pricing.peakHours,
+        byTurn: Object.fromEntries(
+          Object.entries(state.byTurn).map(([turn, t]) => [turn, { ...bucketsView(t.buckets, t.cny), tier: t.tier }]),
+        ),
+      }),
+    },
     stateVersion: 1,
   };
 }
