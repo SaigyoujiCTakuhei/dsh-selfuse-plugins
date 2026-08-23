@@ -33,7 +33,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add file:/绝对路径/dsh-archive-panel
+dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel
 ```
 
 安装后重启 `dsh web` 并刷新页面。
