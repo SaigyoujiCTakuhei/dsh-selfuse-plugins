@@ -151,8 +151,9 @@ window.__ModuleLoader__.load({
         const [toast, setToast] = React.useState(null);
         const [arm, setArm] = React.useState(null);
         const [meta, setMeta] = React.useState({});
-        const [sortKey, setSortKey] = React.useState("archived");
-        const [sortDir, setSortDir] = React.useState("desc");
+        const initialSort = loadSortPref();
+        const [sortKey, setSortKey] = React.useState(initialSort ? initialSort.key : "archived");
+        const [sortDir, setSortDir] = React.useState(initialSort ? initialSort.dir : "desc");
         const [query, setQuery] = React.useState("");
         const [selectedWs, setSelectedWs] = React.useState("ALL");
         const [preview, setPreview] = React.useState(null);
