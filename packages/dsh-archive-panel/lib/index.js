@@ -2,6 +2,9 @@
 // Loopback-only HTTP routes over the workspace registry's archived set:
 //   POST /api/dsh-archive/unarchive - restore one archived session
 //   POST /api/dsh-archive/delete    - permanently delete one archived session
+//   GET  /api/dsh-archive/meta      - archived session metadata (createdAt/turns/size)
+//   GET  /api/dsh-archive/detail    - preview a session's conversation history
+//   POST /api/dsh-archive/delete-all - permanently delete every archived session
 // The registry has no public unarchive today, so we attach one idempotently and
 // drive it through the registry's own serialized write path: in-memory state and
 // the durable workspace domain stay consistent, and the emitted domain/changed
@@ -9,11 +12,15 @@
 // the browser automatically.
 
 import { rm } from "node:fs/promises";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { zstdDecompressSync } from "node:zlib";
 
 const UNARCHIVE_PATH = "/api/dsh-archive/unarchive";
 const DELETE_PATH = "/api/dsh-archive/delete";
 const META_PATH = "/api/dsh-archive/meta";
+const DETAIL_PATH = "/api/dsh-archive/detail";
+const DELETE_ALL_PATH = "/api/dsh-archive/delete-all";
 const MAX_BODY_BYTES = 64 * 1024;
 
 const inject = ["webServer", "workspaceRegistry", "sessionPersistence"];
@@ -33,6 +40,166 @@ function writeJson(res, status, body) {
     "cache-control": "no-store"
   });
   res.end(payload);
+}
+
+const ZSTD_MAGIC = 4247762216;
+
+/** Recursively sum the byte size of a directory. */
+function dirSize(dir) {
+  let total = 0;
+  if (!existsSync(dir)) return 0;
+  try {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      const stat = statSync(full);
+      if (stat.isDirectory()) total += dirSize(full);
+      else total += stat.size;
+    }
+  } catch { /* best effort */ }
+  return total;
+}
+
+/** Scan concatenated zstd frames from a buffer (handles multi-frame logs). */
+function scanZstdFrames(buffer) {
+  const frames = [];
+  let offset = 0;
+  while (offset < buffer.length) {
+    const start = offset;
+    if (buffer.length - offset < 4) break;
+    if (buffer.readUInt32LE(offset) !== ZSTD_MAGIC) break;
+    offset += 4;
+    if (offset === buffer.length) break;
+    const descriptor = buffer.readUInt8(offset);
+    offset += 1;
+    if ((descriptor & 24) !== 0) break;
+    const contentSizeFlag = descriptor >>> 6;
+    const singleSegment = (descriptor & 32) !== 0;
+    const dictionaryFlag = descriptor & 3;
+    const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag;
+    const contentSizeBytes = contentSizeFlag === 0 ? (singleSegment ? 1 : 0) : 1 << contentSizeFlag;
+    const remainingHeaderBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes;
+    if (buffer.length - offset < remainingHeaderBytes) break;
+    offset += remainingHeaderBytes;
+    for (;;) {
+      if (buffer.length - offset < 3) break;
+      const blockHeader = buffer.readUIntLE(offset, 3);
+      offset += 3;
+      const lastBlock = (blockHeader & 1) !== 0;
+      const blockType = (blockHeader >>> 1) & 3;
+      const blockSize = blockHeader >>> 3;
+      if (blockType === 3) break;
+      const payloadBytes = blockType === 1 ? 1 : blockSize;
+      if (buffer.length - offset < payloadBytes) break;
+      offset += payloadBytes;
+      if (lastBlock) break;
+    }
+    if (descriptor & 4) {
+      if (buffer.length - offset < 4) break;
+      offset += 4;
+    }
+    frames.push({ start, end: offset });
+  }
+  return frames;
+}
+
+/** Decompress a (possibly multi-frame) zstd session log to UTF-8 text. */
+function decodeZstdLog(filePath) {
+  if (!existsSync(filePath)) return "";
+  try {
+    const buf = readFileSync(filePath);
+    const frames = scanZstdFrames(buf);
+    if (frames.length === 0) {
+      try { return zstdDecompressSync(buf).toString("utf8"); } catch { return ""; }
+    }
+    const chunks = [];
+    for (const { start, end } of frames) {
+      try { chunks.push(zstdDecompressSync(buf.subarray(start, end))); } catch { /* tolerate */ }
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+/** Read the raw transcript text from a session data directory. */
+function readTranscriptText(dataDir) {
+  const zstdPath = join(dataDir, "session.jsonl.zstd");
+  const jsonlPath = join(dataDir, "session.jsonl");
+  if (existsSync(zstdPath)) return decodeZstdLog(zstdPath);
+  if (existsSync(jsonlPath)) {
+    try { return readFileSync(jsonlPath, "utf8"); } catch { return ""; }
+  }
+  return "";
+}
+
+/** Count conversation turns (turn/start events) in a session's log. */
+function countTurns(dataDir) {
+  const rawText = readTranscriptText(dataDir);
+  if (!rawText) return 0;
+  let turns = 0;
+  for (const line of rawText.split("\n")) {
+    if (!line) continue;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.type === "turn/start") turns++;
+    } catch { /* ignore */ }
+  }
+  return turns;
+}
+
+/** Extract user/assistant message cards for the preview modal. */
+function extractSessionDetail(dataDir, maxMessages = 50) {
+  const rawText = readTranscriptText(dataDir);
+  if (!rawText) return { messages: [], totalMessages: 0 };
+  let header = null;
+  const messages = [];
+  for (const line of rawText.split("\n")) {
+    if (!line) continue;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.type === "session") {
+        header = ev;
+      } else if (ev.type === "user/message") {
+        const contents = ev.data && ev.data.content ? ev.data.content : [];
+        for (const item of contents) {
+          if (item && item.type === "text" && typeof item.text === "string") {
+            let clean = item.text;
+            const reminderIdx = clean.indexOf("<system-reminder>");
+            if (reminderIdx !== -1) clean = clean.slice(0, reminderIdx).trim();
+            const runtimeIdx = clean.indexOf("Current runtime context.");
+            if (runtimeIdx !== -1) clean = clean.slice(0, runtimeIdx).trim();
+            if (clean) {
+              messages.push({ role: "user", time: ev.time || (header && header.createdAt), content: clean });
+            }
+          }
+        }
+      } else if (ev.type === "assistant/message") {
+        const contents = (ev.data && ev.data.message && ev.data.message.content) || [];
+        const parts = [];
+        for (const item of contents) {
+          if (item && item.type === "text" && typeof item.text === "string" && item.text.trim()) parts.push(item.text.trim());
+        }
+        if (parts.length > 0) {
+          messages.push({ role: "assistant", time: ev.time, content: parts.join("\n\n") });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return { messages: messages.slice(-maxMessages), totalMessages: messages.length };
+}
+
+/** Resolve a session's on-disk data directory via sessionPersistence. */
+async function getDataDir(ctx, sessionId) {
+  try {
+    const headers = await ctx.sessionPersistence.list();
+    const header = headers.find((candidate) => candidate.id === sessionId);
+    if (header === undefined) return undefined;
+    const location = ctx.sessionPersistence.locate(header);
+    if (location === undefined || !location.path) return undefined;
+    return dirname(location.path);
+  } catch {
+    return undefined;
+  }
 }
 
 function isLoopbackRequest(request) {
@@ -188,12 +355,73 @@ function makeMetaHandler(ctx) {
       }
       const items = archived.map((id) => {
         const header = byId.get(id);
-        return {
-          id,
-          createdAt: header && typeof header.createdAt === "number" ? header.createdAt : 0
-        };
+        const createdAt = header && typeof header.createdAt === "number" ? header.createdAt : 0;
+        let turns = 0;
+        let dataSize = 0;
+        try {
+          if (header) {
+            const location = ctx.sessionPersistence.locate(header);
+            if (location && location.path) {
+              const dataDir = dirname(location.path);
+              if (existsSync(dataDir)) {
+                dataSize = dirSize(dataDir);
+                turns = countTurns(dataDir);
+              }
+            }
+          }
+        } catch { /* best effort */ }
+        return { id, createdAt, turns, dataSize };
       });
       writeJson(res, 200, { ok: true, items });
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+}
+
+function makeDetailHandler(ctx) {
+  return async (req, res) => {
+    if (req.method !== "GET") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
+    if (!isLoopbackRequest(req)) { writeJson(res, 403, { ok: false, error: "forbidden: loopback-only" }); return; }
+    try {
+      const url = new URL(req.url, "http://localhost");
+      const sessionId = url.searchParams.get("sessionId");
+      if (typeof sessionId !== "string" || sessionId.trim() === "") {
+        writeJson(res, 400, { ok: false, error: "sessionId required" });
+        return;
+      }
+      const dataDir = await getDataDir(ctx, sessionId.trim());
+      if (dataDir === undefined) {
+        writeJson(res, 404, { ok: false, error: "session data not found" });
+        return;
+      }
+      const detail = extractSessionDetail(dataDir, 50);
+      writeJson(res, 200, { ok: true, sessionId: sessionId.trim(), ...detail });
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+}
+
+function makeDeleteAllHandler(ctx) {
+  return async (req, res) => {
+    if (req.method !== "POST") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
+    if (!isLoopbackRequest(req)) { writeJson(res, 403, { ok: false, error: "forbidden: loopback-only" }); return; }
+    try {
+      const archived = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
+        ? [...ctx.workspaceRegistry.archivedSessionIds]
+        : [];
+      let removed = 0;
+      const errors = [];
+      for (const id of archived) {
+        try {
+          await deleteSessionPermanently(ctx, id);
+          removed++;
+        } catch (error) {
+          errors.push(id + ": " + (error instanceof Error ? error.message : String(error)));
+        }
+      }
+      writeJson(res, 200, { ok: true, removed, total: archived.length, errors });
     } catch (error) {
       writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -242,7 +470,9 @@ function apply(ctx) {
     const disposers = [
       ctx.webServer.register({ kind: "exact", path: UNARCHIVE_PATH, handler: makeUnarchiveHandler(ctx) }),
       ctx.webServer.register({ kind: "exact", path: DELETE_PATH, handler: makeDeleteHandler(ctx) }),
-      ctx.webServer.register({ kind: "exact", path: META_PATH, handler: makeMetaHandler(ctx) })
+      ctx.webServer.register({ kind: "exact", path: META_PATH, handler: makeMetaHandler(ctx) }),
+      ctx.webServer.register({ kind: "exact", path: DETAIL_PATH, handler: makeDetailHandler(ctx) }),
+      ctx.webServer.register({ kind: "exact", path: DELETE_ALL_PATH, handler: makeDeleteAllHandler(ctx) })
     ];
     return () => {
       for (const dispose of disposers) dispose();
