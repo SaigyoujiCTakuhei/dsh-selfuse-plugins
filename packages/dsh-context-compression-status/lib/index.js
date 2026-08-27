@@ -17,10 +17,12 @@
  *    client. The route (mirroring `dsh-archive-panel`) is the supported way for
  *    a static plugin to deliver host-computed, per-session data to the GUI.
  *
- * The unit carries a `schema` because the session-projection registry runs
- * `schema.parse(view(state))` on every snapshot. We hand-roll it (no `zod`) so
- * the host half stays dependency-free and resolves cleanly even when the
- * package is symlinked into a profile.
+ * The unit carries a `wire` block (`viewSchema` + `view`) because, since dsh
+ * 0.1.1-rc.2, the session-projection registry reads
+ * `wire.viewSchema.parse(wire.view(state))` on every snapshot/restore. The old
+ * top-level `schema`/`view` keys are ignored. We hand-roll `viewSchema.parse`
+ * (no `zod`) so the host half stays dependency-free and resolves cleanly even
+ * when the package is symlinked into a profile.
  */
 const name = "dsh-context-compression-status";
 const inject = ["sessionProjections", "webServer", "sessions", "sessionProjectionCache"];
@@ -68,7 +70,6 @@ function parse(value) {
 function makeUnit() {
   return {
     key: "contextCompaction",
-    schema: { parse },
     init: () => ({ count: 0, last: null }),
     apply: (state, event) => {
       if (event.type !== "compaction/summary") return state;
@@ -89,11 +90,18 @@ function makeUnit() {
         },
       };
     },
-    view: (state) => ({
-      compactionCount: state.count,
-      compressed: state.count > 0,
-      lastCompaction: state.last,
-    }),
+    // dsh 0.1.1-rc.2 contract: the registry reads `wire.viewSchema.parse(
+    // wire.view(state))` on every snapshot. The old top-level `schema`/`view`
+    // keys are IGNORED, so omitting `wire` made every snapshot throw (and the
+    // route's try/catch swallow it into an empty value → count stuck at 0).
+    wire: {
+      viewSchema: { parse },
+      view: (state) => ({
+        compactionCount: state.count,
+        compressed: state.count > 0,
+        lastCompaction: state.last,
+      }),
+    },
     stateVersion: 1,
   };
 }
