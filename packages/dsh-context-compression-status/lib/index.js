@@ -23,7 +23,7 @@
  * package is symlinked into a profile.
  */
 const name = "dsh-context-compression-status";
-const inject = ["sessionProjections", "webServer", "sessions"];
+const inject = ["sessionProjections", "webServer", "sessions", "sessionProjectionCache"];
 
 const ROUTE_PATH = "/api/dsh-context-compression/status";
 
@@ -140,11 +140,19 @@ const EMPTY = { compactionCount: 0, compressed: false, lastCompaction: null };
  * Build the route handler. Reads `?sessionId=`, resolves the session, and
  * returns its `contextCompaction` projection value (fail-soft to the empty
  * shape so the client never breaks on a missing session/projection).
- * @param ctx - the plugin context (resolves `sessions` and `sessionProjections`).
- * @returns the HTTP handler.
+ *
+ * Resolution prefers the in-memory, attached session (`sessions.get` +
+ * `sessionProjections.snapshot`) for live accuracy, and falls back to a cold
+ * read (`sessionProjectionCache.coldSnapshot`) when the session is not
+ * currently attached — e.g. the user opened a past session from history, or it
+ * detached after the view. `sessions.get` only returns live/attached sessions,
+ * so without the cold fallback the route would 404 for exactly the session the
+ * user is inspecting, leaving the badge stuck on "未压缩".
+ * @param ctx - the plugin context.
+ * @returns the HTTP handler (async).
  */
 function makeStatusHandler(ctx) {
-  return (req, res) => {
+  return async (req, res) => {
     if (!isLoopbackRequest(req)) {
       writeJson(res, 403, { ok: false, error: "forbidden" });
       return;
@@ -162,23 +170,29 @@ function makeStatusHandler(ctx) {
     }
     const sessions = ctx.get("sessions");
     const registry = ctx.get("sessionProjections");
-    if (sessions === undefined || registry === undefined) {
+    const cache = ctx.get("sessionProjectionCache");
+    if (registry === undefined) {
       writeJson(res, 503, { ok: false, error: "service unavailable" });
-      return;
-    }
-    const session = sessions.get(sessionId);
-    if (session === undefined) {
-      writeJson(res, 404, { ok: false, error: "session not found" });
       return;
     }
     let value = EMPTY;
     try {
-      const snap = registry.snapshot(session);
-      const found = snap.values.contextCompaction;
-      if (found !== undefined) value = found;
+      const live = sessions !== undefined ? sessions.get(sessionId) : undefined;
+      if (live !== undefined) {
+        const snap = registry.snapshot(live);
+        const found = snap.values.contextCompaction;
+        if (found !== undefined) value = found;
+      } else if (cache !== undefined) {
+        const snap = await cache.coldSnapshot(sessionId, req.signal);
+        const found = snap.values.contextCompaction;
+        if (found !== undefined) value = found;
+      } else {
+        writeJson(res, 404, { ok: false, error: "session not found" });
+        return;
+      }
     } catch (error) {
       ctx.logger?.warn?.(
-        `dsh-context-compression-status: snapshot for "${sessionId}" failed: ${String(error)}`,
+        `dsh-context-compression-status: resolve "${sessionId}" failed: ${String(error)}`,
       );
     }
     writeJson(res, 200, { ok: true, ...value });
