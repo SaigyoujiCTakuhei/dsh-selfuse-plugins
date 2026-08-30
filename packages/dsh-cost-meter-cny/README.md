@@ -10,8 +10,12 @@ with two changes:
 1. **Peak/off-peak pricing** — every usage sample is priced by the tier that was
    active at that event's own timestamp (event.time, Unix ms), under Beijing
    time: peak = 09:00–12:00 and 14:00–18:00 (Asia/Shanghai), offpeak =
-   everything else. The fold stays a pure function of the event stream, so
-   checkpoint restore / replay never drifts.
+   everything else. Peak only applies on the weekdays listed in `peakDays`
+   (0=Sun…6=Sat; the shipped default is `[1,2,3,4,5]` = Mon–Fri, matching
+   DeepSeek's official policy — weekends are always off-peak). Omit `peakDays`
+   (or set it to `[]` / `null`) to treat every day as peak-eligible. The fold
+   stays a pure function of the event stream, so checkpoint restore / replay
+   never drifts.
 2. **CNY rendering** — the badge renders ¥ (upstream hard-codes $).
 
 ## Pricing table
@@ -25,6 +29,7 @@ per model:
       "per": 1000000,
       "timezone": "Asia/Shanghai",
       "peakHours": [[9, 12], [14, 18]],
+      "peakDays": [1, 2, 3, 4, 5],
       "default": {
         "offpeak": { "input": 4.5,  "output": 13.5, "cacheRead": 0.15, "cacheWrite": 0 },
         "peak":    { "input": 9.0,  "output": 27.0, "cacheRead": 0.30, "cacheWrite": 0 }
@@ -35,6 +40,10 @@ per model:
           "peak":    { "input": 9.0,  "output": 27.0, "cacheRead": 0.30, "cacheWrite": 0 }
         },
         "deepseek-official/deepseek-v4-flash": {
+          "offpeak": { "input": 1.5,  "output": 4.5,  "cacheRead": 0.05, "cacheWrite": 0 },
+          "peak":    { "input": 3.0,  "output": 9.0,  "cacheRead": 0.10, "cacheWrite": 0 }
+        },
+        "deepseek-official/deepseek-v4-flash-vision-exp": {
           "offpeak": { "input": 1.5,  "output": 4.5,  "cacheRead": 0.05, "cacheWrite": 0 },
           "peak":    { "input": 3.0,  "output": 9.0,  "cacheRead": 0.10, "cacheWrite": 0 }
         }

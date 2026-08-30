@@ -61,8 +61,26 @@ window.__ModuleLoader__.load({
       return new Date(timeMs + 8 * 3600 * 1000).getUTCHours();
     }
 
-    function tierAtNow(peakHours, timezone) {
+    function dayInTz(timeMs, timezone) {
+      var names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      try {
+        var parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(new Date(timeMs));
+        for (var i = 0; i < parts.length; i++) {
+          if (parts[i].type === "weekday") {
+            var idx = names.indexOf(parts[i].value);
+            if (idx >= 0) return idx;
+          }
+        }
+      } catch (e) { /* unknown timezone -> fall through */ }
+      return new Date(timeMs).getUTCDay();
+    }
+
+    function tierAtNow(peakHours, timezone, peakDays) {
       if (!Array.isArray(peakHours) || peakHours.length === 0) return null;
+      // Outside the configured peak days (e.g. weekends) the tier is off-peak.
+      if (Array.isArray(peakDays) && peakDays.length > 0) {
+        if (peakDays.indexOf(dayInTz(Date.now(), timezone)) === -1) return "offpeak";
+      }
       var hour = hourInTz(Date.now(), timezone);
       for (var i = 0; i < peakHours.length; i++) {
         var start = peakHours[i][0];
@@ -74,14 +92,14 @@ window.__ModuleLoader__.load({
 
     // Re-render on an interval so the live tier flips over at the hour boundary
     // even when no new usage event arrives. Returns "peak" | "offpeak" | null.
-    function useNowTier(peakHours, timezone) {
+    function useNowTier(peakHours, timezone, peakDays) {
       var tick = react.useState(0);
       var setTick = tick[1];
       react.useEffect(function () {
         var id = setInterval(function () { setTick(function (n) { return n + 1; }); }, 30000);
         return function () { clearInterval(id); };
       }, []);
-      return tierAtNow(peakHours, timezone);
+      return tierAtNow(peakHours, timezone, peakDays);
     }
     function CostChip(props) {
       var hoverState = react.useState(false);
@@ -141,7 +159,7 @@ window.__ModuleLoader__.load({
     // Session total, shown persistently in the session header utilities.
     function SessionCostBadge(props) {
       var cost = props.useProjection ? props.useProjection("sessionCostCny") : void 0;
-      var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone);
+      var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone, cost && cost.peakDays);
       if (!cost || cost.priced !== true) return null;
       var label = formatCny(cost.total);
       if (label === null) return null;
@@ -159,7 +177,7 @@ window.__ModuleLoader__.load({
 
       var cost = useProjection ? useProjection("sessionCostCny") : void 0;
       var nodes = useSession ? useSession(function (s) { return s ? s.nodes : void 0; }) : void 0;
-      var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone);
+      var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone, cost && cost.peakDays);
 
       if (!cost || cost.priced !== true) return null;
 

@@ -37,6 +37,9 @@ const DEFAULT_PRICING = {
     [9, 12],
     [14, 18],
   ],
+  // Peak applies only on these weekdays (DeepSeek official policy: Mon–Fri;
+  // every other day is off-peak). 0=Sun … 6=Sat. Omit / empty / null = every day.
+  peakDays: [1, 2, 3, 4, 5],
   default: {
     offpeak: { input: 4.5, output: 13.5, cacheRead: 0.15, cacheWrite: 0 },
     peak: { input: 9.0, output: 27.0, cacheRead: 0.3, cacheWrite: 0 },
@@ -47,6 +50,10 @@ const DEFAULT_PRICING = {
       peak: { input: 9.0, output: 27.0, cacheRead: 0.3, cacheWrite: 0 },
     },
     "deepseek-official/deepseek-v4-flash": {
+      offpeak: { input: 1.5, output: 4.5, cacheRead: 0.05, cacheWrite: 0 },
+      peak: { input: 3.0, output: 9.0, cacheRead: 0.1, cacheWrite: 0 },
+    },
+    "deepseek-official/deepseek-v4-flash-vision-exp": {
       offpeak: { input: 1.5, output: 4.5, cacheRead: 0.05, cacheWrite: 0 },
       peak: { input: 3.0, output: 9.0, cacheRead: 0.1, cacheWrite: 0 },
     },
@@ -84,13 +91,17 @@ function normalizePricing(doc) {
         .filter((r) => Array.isArray(r) && r.length === 2)
         .map((r) => [Number(r[0]), Number(r[1])])
     : DEFAULT_PRICING.peakHours;
+  const rawPeakDays = Array.isArray(doc?.peakDays)
+    ? doc.peakDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+    : null;
+  const peakDays = rawPeakDays && rawPeakDays.length > 0 ? rawPeakDays : null;
   const defaultTier = coerceTier(doc?.default ?? DEFAULT_PRICING.default);
   const models = {};
   const raw = doc?.models;
   if (raw && typeof raw === "object") {
     for (const [key, entry] of Object.entries(raw)) models[key] = coerceTier(entry);
   }
-  return { per, currency, timezone, peakHours, default: defaultTier, models };
+  return { per, currency, timezone, peakHours, peakDays, default: defaultTier, models };
 }
 
 function loadPricing(path) {
@@ -131,8 +142,29 @@ function hourInTz(timeMs, timezone) {
   return new Date(timeMs + 8 * 3600 * 1000).getUTCHours();
 }
 
+/** Day of week (0=Sun … 6=Sat) of a Unix-ms instant in the pricing timezone; falls back to UTC. */
+function dayInTz(timeMs, timezone) {
+  const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(new Date(timeMs));
+    const wd = parts.find((p) => p.type === "weekday");
+    if (wd) {
+      const idx = names.indexOf(wd.value);
+      if (idx >= 0) return idx;
+    }
+  } catch {
+    /* invalid timezone -> fall through */
+  }
+  return new Date(timeMs).getUTCDay();
+}
+
 /** Resolve the active tier ("peak" | "offpeak") for a Unix-ms instant. */
 function tierAt(timeMs, pricing) {
+  // Outside the configured peak days (e.g. weekends when peakDays lists
+  // weekdays only) the tier is always off-peak, regardless of the hour window.
+  if (Array.isArray(pricing.peakDays) && pricing.peakDays.length > 0) {
+    if (pricing.peakDays.indexOf(dayInTz(timeMs, pricing.timezone)) === -1) return "offpeak";
+  }
   const hour = hourInTz(timeMs, pricing.timezone);
   for (const [start, end] of pricing.peakHours) {
     if (hour >= start && hour < end) return "peak";
@@ -163,6 +195,7 @@ const sessionCostSchema = costBucketsSchema
     currency: z.string(),
     timezone: z.string(),
     peakHours: z.array(z.tuple([z.number(), z.number()])),
+    peakDays: z.array(z.number()).nullable(),
     byTurn: z.record(z.string(), costBucketsSchema.extend({ tier: tierSchema })),
   })
   .strict();
@@ -286,6 +319,7 @@ function makeProjection(pricing) {
         currency: pricing.currency,
         timezone: pricing.timezone,
         peakHours: pricing.peakHours,
+        peakDays: pricing.peakDays,
         byTurn: Object.fromEntries(
           Object.entries(state.byTurn).map(([turn, t]) => [turn, { ...bucketsView(t.buckets, t.cny), tier: t.tier }]),
         ),
