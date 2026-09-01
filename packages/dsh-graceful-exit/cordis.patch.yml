@@ -1,0 +1,6 @@
+# Bundle patch layer shipped with the package. Applied when this package is
+# listed in a profile's `dsh.profile.bundles`. It mounts the plugin's host half
+# (the loopback-only shutdown route); the browser half ships via `dsh.client`.
+- insert:
+    - id: graceful-exit
+      name: 'dsh-graceful-exit'
