@@ -40,12 +40,12 @@ curl -X POST http://127.0.0.1:3080/api/dsh-graceful-exit/shutdown
 # {"ok":true,"pid":<pid>,"signal":"SIGINT"} —— 随后 dsh 优雅退出
 ```
 
-## 安装（web profile，软链）
+## 安装
 
-`~/.dsh/profiles/web/package.json` 的 `dependencies` 加：
-
-```json
-"dsh-graceful-exit": "link:/home/p/AI Related/dsh-selfuse-plugins/packages/dsh-graceful-exit"
+```bash
+dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-graceful-exit
 ```
 
-并把 `"dsh-graceful-exit"` 加进 `dsh.profile.bundles`，然后 `dsh plugin --profile web install`，重启 `dsh web` 生效。
+安装后重启 `dsh web` 并刷新页面。
+
+> 开发者本机软链方式（改 `lib/` 即源码，重启 `dsh web` 或 `/reload dsh-graceful-exit` 生效）：在 `~/.dsh/profiles/web/package.json` 的 `dependencies` 加 `"dsh-graceful-exit": "link:<本仓库>/packages/dsh-graceful-exit"`，并把 `"dsh-graceful-exit"` 加入 `dsh.profile.bundles`，然后 `dsh plugin --profile web install`。

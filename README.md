@@ -21,6 +21,7 @@
 | dsh-cost-meter-cny | 峰谷双档 ¥ 成本徽章（整会话 + 每回合） |
 | dsh-archive-panel | 侧边栏归档面板：列出已归档会话并可一键恢复 |
 | dsh-context-compression-status | 会话头部上下文压缩状态徽章（上限 / 用量 / 是否压缩 / 次数） |
+| dsh-graceful-exit | 右下角浮动「优雅退出」按钮（等价终端 Ctrl+C，附告别页） |
 
 ## 插件列表
 
@@ -61,6 +62,15 @@ Web GUI 会话头部的上下文压缩状态徽章：把 dsh 自动/手动压缩
 
 详情见 [packages/dsh-context-compression-status/README.md](packages/dsh-context-compression-status/README.md)。
 
+### dsh-graceful-exit
+
+Web GUI 右下角的常驻浮动按钮：一键优雅退出 dsh，与在终端按 Ctrl+C 完全等价。
+
+- host 半注册仅限 loopback 的 `POST /api/dsh-graceful-exit/shutdown`：校验回环来源且必须 POST（防链接预取误杀）后先写回应答，再对自身进程发 `SIGINT` —— 走 dsh profile-boot 注册的同一中断处理器（abort + 逐层 dispose 应用 fiber，退出码 130），幂等守卫保证只发一次信号。
+- client 半在 `shell.overlay`（frame 级浮动层，无会话时也在）注册两段式确认按钮：「⏻ 退出」→ 红色「确认退出？」（4 秒不点自动复原）→ 退出成功后尝试 `window.close()`（浏览器只允许关闭脚本打开的标签页），关不掉则整页显示告别页，避免页面滞留断线重连的破碎状态。
+
+详情见 [packages/dsh-graceful-exit/README.md](packages/dsh-graceful-exit/README.md)。
+
 ## 快速开始
 
 前置条件：官方 `dsh` CLI、`pnpm`；其中 `dsh-everything-plugin` 仅支持 Windows，且需要本机正在运行 voidtools Everything。
@@ -71,14 +81,15 @@ Web GUI 会话头部的上下文压缩状态徽章：把 dsh 自动/手动压缩
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel
     dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-context-compression-status
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-graceful-exit
 
 一次装齐（`dsh plugin add` 转发给 `pnpm add`，支持多包）：
 
-    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-context-compression-status
+    dsh plugin --profile web add github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-everything-plugin github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-cost-meter-cny github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-archive-panel github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-context-compression-status github:SaigyoujiCTakuhei/dsh-selfuse-plugins#path:packages/dsh-graceful-exit
 
 更新到最新：
 
-    dsh plugin --profile web update dsh-everything-plugin dsh-cost-meter-cny dsh-archive-panel dsh-context-compression-status
+    dsh plugin --profile web update dsh-everything-plugin dsh-cost-meter-cny dsh-archive-panel dsh-context-compression-status dsh-graceful-exit
 
 卸载：
 
@@ -93,6 +104,7 @@ Web GUI 会话头部的上下文压缩状态徽章：把 dsh 自动/手动压缩
       dsh-cost-meter-cny/       # 峰谷双档成本徽章
       dsh-archive-panel/        # 归档面板
       dsh-context-compression-status/  # 上下文压缩状态徽章
+      dsh-graceful-exit/        # 右下角优雅退出按钮
 
 每个子包都是独立的 dsh 插件包（`dsh.bundle` + 可选 `dsh.client`），通过 `#path:` 语法从本仓库单独引用。
 
