@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     let react = require("react");
 
-    var css = ".dsh-cost-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-variant-numeric:tabular-nums;font-weight:500;color:var(--dsw-alias-label-secondary,#6b7280);cursor:default;user-select:none;padding:0 2px}.dsh-cost-tip{position:fixed;z-index:99999;background:var(--dsw-alias-bg-elevated,#fff);color:var(--dsw-alias-label-primary,#111827);border:1px solid var(--dsw-alias-border-l1,#e5e7eb);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-line;box-shadow:0 6px 24px rgba(0,0,0,.14);pointer-events:none;max-width:360px}.dsh-cost-tier{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;line-height:1;padding:1px 6px;border-radius:999px;letter-spacing:.02em}.dsh-cost-tier--peak{color:#b42318;background:rgba(217,45,32,.12)}.dsh-cost-tier--offpeak{color:#067647;background:rgba(6,118,71,.12)}.dsh-cost-tier-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}";
+    var css = ".dsh-cost-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-variant-numeric:tabular-nums;font-weight:500;color:var(--dsw-alias-label-secondary,#6b7280);cursor:default;user-select:none;padding:0 2px}.dsh-cost-tip{position:fixed;width:max-content;z-index:99999;background:var(--dsw-alias-tooltip-bg,#fff);color:var(--dsw-alias-label-primary,#111827);border:1px solid var(--dsw-alias-border-l1,#e5e7eb);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-line;box-shadow:0 6px 24px rgba(0,0,0,.14);pointer-events:none;max-width:360px}.dsh-cost-tier{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;line-height:1;padding:1px 6px;border-radius:999px;letter-spacing:.02em}.dsh-cost-tier--peak{color:#b42318;background:rgba(217,45,32,.12)}.dsh-cost-tier--offpeak{color:#067647;background:rgba(6,118,71,.12)}.dsh-cost-tier-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}";
     var tagId = "dsh-cost-meter-cny/badge.css";
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
       var tag = document.createElement("style");
@@ -111,7 +111,12 @@ window.__ModuleLoader__.load({
 
       function onEnter(ev) {
         var r = ev.currentTarget.getBoundingClientRect();
-        setPos({ top: r.bottom + 6, left: r.left });
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var estH = props.lines.length * 20.4 + 18;
+        var p = { top: r.bottom + 6 };
+        if (r.left + 368 > vw) { p.right = vw - r.right; } else { p.left = r.left; }
+        if (r.bottom + 6 + estH > vh) { p.top = r.top - 6 - estH; }
+        setPos(p);
         setHover(true);
       }
       function onLeave() {
@@ -121,7 +126,7 @@ window.__ModuleLoader__.load({
       var tip = hover && pos
         ? react.createElement("span", {
             className: "dsh-cost-tip",
-            style: { top: pos.top + "px", left: pos.left + "px" },
+            style: { top: pos.top + "px", left: pos.left != null ? pos.left + "px" : void 0, right: pos.right != null ? pos.right + "px" : void 0 },
             role: "tooltip",
           }, props.lines.join("\n"))
         : null;

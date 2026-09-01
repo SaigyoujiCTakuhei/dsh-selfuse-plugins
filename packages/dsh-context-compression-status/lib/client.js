@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
     var react = require("react");
 
     var css =
-      ".dsh-cc-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-variant-numeric:tabular-nums;font-weight:500;color:var(--dsw-alias-label-secondary,#6b7280);cursor:default;user-select:none;padding:0 2px}.dsh-cc-compressed{color:var(--dsw-alias-accent,#2563eb)}.dsh-cc-tip{position:fixed;z-index:99999;background:var(--dsw-alias-bg-elevated,#fff);color:var(--dsw-alias-label-primary,#111827);border:1px solid var(--dsw-alias-border-l1,#e5e7eb);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-line;box-shadow:0 6px 24px rgba(0,0,0,.14);pointer-events:none;max-width:360px}";
+      ".dsh-cc-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-variant-numeric:tabular-nums;font-weight:500;color:var(--dsw-alias-label-secondary,#6b7280);cursor:default;user-select:none;padding:0 2px}.dsh-cc-compressed{color:var(--dsw-alias-brand-primary,#2563eb)}.dsh-cc-tip{position:fixed;width:max-content;z-index:99999;background:var(--dsw-alias-tooltip-bg,#fff);color:var(--dsw-alias-label-primary,#111827);border:1px solid var(--dsw-alias-border-l1,#e5e7eb);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-line;box-shadow:0 6px 24px rgba(0,0,0,.14);pointer-events:none;max-width:360px}";
     var tagId = "dsh-context-compression-status/badge.css";
     if (
       typeof document !== "undefined" &&
@@ -115,7 +115,12 @@ window.__ModuleLoader__.load({
 
       function onEnter(ev) {
         var r = ev.currentTarget.getBoundingClientRect();
-        setPos({ top: r.bottom + 6, left: r.left });
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var estH = lines.length * 20.4 + 18;
+        var p = { top: r.bottom + 6 };
+        if (r.left + 368 > vw) { p.right = vw - r.right; } else { p.left = r.left; }
+        if (r.bottom + 6 + estH > vh) { p.top = r.top - 6 - estH; }
+        setPos(p);
         setHover(true);
       }
       function onLeave() {
@@ -126,7 +131,7 @@ window.__ModuleLoader__.load({
         hover && pos
           ? react.createElement(
               "span",
-              { className: "dsh-cc-tip", style: { top: pos.top + "px", left: pos.left + "px" }, role: "tooltip" },
+              { className: "dsh-cc-tip", style: { top: pos.top + "px", left: pos.left != null ? pos.left + "px" : void 0, right: pos.right != null ? pos.right + "px" : void 0 }, role: "tooltip" },
               lines.join("\n"),
             )
           : null;
