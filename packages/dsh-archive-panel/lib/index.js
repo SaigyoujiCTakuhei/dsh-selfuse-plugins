@@ -1,10 +1,13 @@
 // dsh-archive-panel - host half.
 // Loopback-only HTTP routes over the workspace registry's archived set:
 //   POST /api/dsh-archive/unarchive - restore one archived session
+//   POST /api/dsh-archive/unarchive-all - restore every archived session
+//   POST /api/dsh-archive/unarchive-selected - restore the given archived sessions
 //   POST /api/dsh-archive/delete    - permanently delete one archived session
 //   GET  /api/dsh-archive/meta      - archived session metadata (createdAt/turns/size)
 //   GET  /api/dsh-archive/detail    - preview a session's conversation history
 //   POST /api/dsh-archive/delete-all - permanently delete every archived session
+//   POST /api/dsh-archive/delete-selected - permanently delete the given archived sessions
 // The registry has no public unarchive today, so we attach one idempotently and
 // drive it through the registry's own serialized write path: in-memory state and
 // the durable workspace domain stay consistent, and the emitted domain/changed
@@ -17,10 +20,13 @@ import { dirname, join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 
 const UNARCHIVE_PATH = "/api/dsh-archive/unarchive";
+const UNARCHIVE_ALL_PATH = "/api/dsh-archive/unarchive-all";
+const UNARCHIVE_SELECTED_PATH = "/api/dsh-archive/unarchive-selected";
 const DELETE_PATH = "/api/dsh-archive/delete";
 const META_PATH = "/api/dsh-archive/meta";
 const DETAIL_PATH = "/api/dsh-archive/detail";
 const DELETE_ALL_PATH = "/api/dsh-archive/delete-all";
+const DELETE_SELECTED_PATH = "/api/dsh-archive/delete-selected";
 const MAX_BODY_BYTES = 64 * 1024;
 
 const inject = ["webServer", "workspaceRegistry", "sessionPersistence"];
@@ -403,6 +409,21 @@ function makeDetailHandler(ctx) {
   };
 }
 
+/** Delete a batch of archived sessions, continuing past per-session failures. */
+async function deleteManyPermanently(ctx, ids) {
+  let removed = 0;
+  const errors = [];
+  for (const id of ids) {
+    try {
+      await deleteSessionPermanently(ctx, id);
+      removed++;
+    } catch (error) {
+      errors.push(id + ": " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+  return { removed, total: ids.length, errors };
+}
+
 function makeDeleteAllHandler(ctx) {
   return async (req, res) => {
     if (req.method !== "POST") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
@@ -411,17 +432,35 @@ function makeDeleteAllHandler(ctx) {
       const archived = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
         ? [...ctx.workspaceRegistry.archivedSessionIds]
         : [];
-      let removed = 0;
-      const errors = [];
-      for (const id of archived) {
-        try {
-          await deleteSessionPermanently(ctx, id);
-          removed++;
-        } catch (error) {
-          errors.push(id + ": " + (error instanceof Error ? error.message : String(error)));
-        }
-      }
-      writeJson(res, 200, { ok: true, removed, total: archived.length, errors });
+      const outcome = await deleteManyPermanently(ctx, archived);
+      writeJson(res, 200, { ok: true, removed: outcome.removed, total: outcome.total, errors: outcome.errors });
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+}
+
+function makeDeleteSelectedHandler(ctx) {
+  return async (req, res) => {
+    if (req.method !== "POST") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
+    if (!isLoopbackRequest(req)) { writeJson(res, 403, { ok: false, error: "forbidden: loopback-only" }); return; }
+    const body = await readJsonBody(req);
+    const raw = body && Array.isArray(body.sessionIds) ? body.sessionIds : [];
+    const requested = [];
+    for (const id of raw) {
+      const trimmed = typeof id === "string" ? id.trim() : "";
+      if (trimmed !== "" && requested.indexOf(trimmed) === -1) requested.push(trimmed);
+    }
+    if (requested.length === 0) { writeJson(res, 400, { ok: false, error: "sessionIds is required" }); return; }
+    try {
+      // Only honor ids that are currently archived, mirroring the panel's own scope.
+      const archived = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
+        ? [...ctx.workspaceRegistry.archivedSessionIds]
+        : [];
+      const targets = requested.filter((id) => archived.includes(id));
+      if (targets.length === 0) { writeJson(res, 400, { ok: false, error: "没有匹配的归档会话" }); return; }
+      const outcome = await deleteManyPermanently(ctx, targets);
+      writeJson(res, 200, { ok: true, removed: outcome.removed, total: outcome.total, errors: outcome.errors });
     } catch (error) {
       writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -437,6 +476,64 @@ function makeUnarchiveHandler(ctx) {
     try {
       await ctx.workspaceRegistry.unarchiveSession(sessionId);
       writeJson(res, 200, { ok: true, archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] });
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+}
+
+/** Restore a batch of archived sessions, continuing past per-session failures. */
+async function unarchiveMany(ctx, ids) {
+  let restored = 0;
+  const errors = [];
+  for (const id of ids) {
+    try {
+      await ctx.workspaceRegistry.unarchiveSession(id);
+      restored++;
+    } catch (error) {
+      errors.push(id + ": " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+  return { restored, total: ids.length, errors };
+}
+
+function makeUnarchiveAllHandler(ctx) {
+  return async (req, res) => {
+    if (req.method !== "POST") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
+    if (!isLoopbackRequest(req)) { writeJson(res, 403, { ok: false, error: "forbidden: loopback-only" }); return; }
+    try {
+      const archived = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
+        ? [...ctx.workspaceRegistry.archivedSessionIds]
+        : [];
+      const outcome = await unarchiveMany(ctx, archived);
+      writeJson(res, 200, { ok: true, restored: outcome.restored, total: outcome.total, errors: outcome.errors });
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+}
+
+function makeUnarchiveSelectedHandler(ctx) {
+  return async (req, res) => {
+    if (req.method !== "POST") { writeJson(res, 405, { ok: false, error: "method not allowed" }); return; }
+    if (!isLoopbackRequest(req)) { writeJson(res, 403, { ok: false, error: "forbidden: loopback-only" }); return; }
+    const body = await readJsonBody(req);
+    const raw = body && Array.isArray(body.sessionIds) ? body.sessionIds : [];
+    const requested = [];
+    for (const id of raw) {
+      const trimmed = typeof id === "string" ? id.trim() : "";
+      if (trimmed !== "" && requested.indexOf(trimmed) === -1) requested.push(trimmed);
+    }
+    if (requested.length === 0) { writeJson(res, 400, { ok: false, error: "sessionIds is required" }); return; }
+    try {
+      // Only honor ids that are currently archived, mirroring the panel's own scope.
+      const archived = Array.isArray(ctx.workspaceRegistry.archivedSessionIds)
+        ? [...ctx.workspaceRegistry.archivedSessionIds]
+        : [];
+      const targets = requested.filter((id) => archived.includes(id));
+      if (targets.length === 0) { writeJson(res, 400, { ok: false, error: "没有匹配的归档会话" }); return; }
+      const outcome = await unarchiveMany(ctx, targets);
+      writeJson(res, 200, { ok: true, restored: outcome.restored, total: outcome.total, errors: outcome.errors });
     } catch (error) {
       writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -469,10 +566,13 @@ function apply(ctx) {
   ctx.effect(() => {
     const disposers = [
       ctx.webServer.register({ kind: "exact", path: UNARCHIVE_PATH, handler: makeUnarchiveHandler(ctx) }),
+      ctx.webServer.register({ kind: "exact", path: UNARCHIVE_ALL_PATH, handler: makeUnarchiveAllHandler(ctx) }),
+      ctx.webServer.register({ kind: "exact", path: UNARCHIVE_SELECTED_PATH, handler: makeUnarchiveSelectedHandler(ctx) }),
       ctx.webServer.register({ kind: "exact", path: DELETE_PATH, handler: makeDeleteHandler(ctx) }),
       ctx.webServer.register({ kind: "exact", path: META_PATH, handler: makeMetaHandler(ctx) }),
       ctx.webServer.register({ kind: "exact", path: DETAIL_PATH, handler: makeDetailHandler(ctx) }),
-      ctx.webServer.register({ kind: "exact", path: DELETE_ALL_PATH, handler: makeDeleteAllHandler(ctx) })
+      ctx.webServer.register({ kind: "exact", path: DELETE_ALL_PATH, handler: makeDeleteAllHandler(ctx) }),
+      ctx.webServer.register({ kind: "exact", path: DELETE_SELECTED_PATH, handler: makeDeleteSelectedHandler(ctx) })
     ];
     return () => {
       for (const dispose of disposers) dispose();

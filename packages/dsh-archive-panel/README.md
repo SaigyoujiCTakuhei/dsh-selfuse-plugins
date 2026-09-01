@@ -33,18 +33,37 @@
 
 每行「查看内容」按钮打开预览弹窗，从 `session.jsonl.zstd` 解压并抽取用户/助手消息卡片（自动剥离 `<system-reminder>` 与 `Current runtime context.` 运行期上下文，仅显示最近 50 / 共 N 条），便于在不恢复会话的情况下回顾归档内容。
 
-## 全部删除
+## 全部删除 / 删除所选
 
-弹窗「全部删除」按钮（带二次 `confirm` 确认）会彻底删除所有归档会话（磁盘文件 + 注册表引用一并移除，不可恢复）。
+弹窗右侧按钮默认是「全部删除」（带二次 `confirm` 确认），会彻底删除所有归档会话（磁盘文件 + 注册表引用一并移除，不可恢复）。
+
+勾选会话后（两处入口）：
+
+- **每行复选框**：列表中每个归档会话前有一个复选框；
+- **「全选」**：筛选行左侧，作用于当前搜索/筛选后的可见行（再点一次取消全选）。
+
+只要存在勾选，「全部删除」就变为「删除所选会话」（同样带二次确认，确认框中显示数量），一次请求批量删除所选会话；删除会话后勾选自动清空。选择按会话 id 记录，搜索/筛选切换不影响已勾选的项。
+
+## 全部恢复 / 恢复所选
+
+「全部删除」左侧是「全部恢复」按钮，与删除按钮共用同一套复选框勾选：
+
+- 无勾选时为「全部恢复」（带二次 `confirm` 确认），把所有归档会话恢复回会话列表；
+- 有勾选时变为「恢复所选」，只恢复勾选的会话（恢复无破坏性，不弹确认）。
+
+恢复的会话保留原有日志与工作区归属，仅从归档区移回会话列表；批量操作结束后 toast 提示恢复个数，勾选随会话离开归档区自动清空。
 
 ## 结构
 
 - `lib/index.js`（宿主）：注册 loopback-only 的
-  `POST /api/dsh-archive/unarchive`（恢复）、`POST /api/dsh-archive/delete`（彻底删除）、
+  `POST /api/dsh-archive/unarchive`（恢复）、`POST /api/dsh-archive/unarchive-all`（恢复全部）、
+  `POST /api/dsh-archive/unarchive-selected`（批量恢复所选，仅接受当前归档集内的 id）、
+  `POST /api/dsh-archive/delete`（彻底删除）、
   `GET /api/dsh-archive/meta`（返回各归档会话的 `createdAt` / `turns` / `dataSize`）、
-  `GET /api/dsh-archive/detail`（解压日志抽取对话内容）与
-  `POST /api/dsh-archive/delete-all`（清空所有归档）路由。
-- `lib/client.js`（浏览器）：注册 `sidebar.footer.action` 入口 + 归档列表弹窗（含排序工具栏、搜索/筛选、查看内容预览、全部删除）。
+  `GET /api/dsh-archive/detail`（解压日志抽取对话内容）、
+  `POST /api/dsh-archive/delete-all`（清空所有归档）与
+  `POST /api/dsh-archive/delete-selected`（批量删除所选归档，仅接受当前归档集内的 id）路由。
+- `lib/client.js`（浏览器）：注册 `sidebar.footer.action` 入口 + 归档列表弹窗（含排序工具栏、搜索/筛选、复选框多选与批量恢复/删除、查看内容预览、全部恢复/全部删除）。
 
 ## 彻底删除做了什么
 
