@@ -5,7 +5,7 @@ shows a live **CNY cost badge** (whole-session + per-turn) for the open
 conversation in the Web UI, priced with Beijing **peak / off-peak tiers**.
 
 It is a fork of [@steven-wu/dsh-cost-meter](https://github.com/Sttrevens/dsh-cost-meter)
-with two changes:
+with three changes:
 
 1. **Peak/off-peak pricing** — every usage sample is priced by the tier that was
    active at that event's own timestamp (event.time, Unix ms), under Beijing
@@ -17,6 +17,26 @@ with two changes:
    stays a pure function of the event stream, so checkpoint restore / replay
    never drifts.
 2. **CNY rendering** — the badge renders ¥ (upstream hard-codes $).
+3. **DeepSeek-series only** — the badges are visible only while a
+   DeepSeek-series model is on deck (matched on the combined
+   `provider/model` string containing `deepseek` — the current environment is
+   `deepseek-official/deepseek-v4-pro` / `-flash` / `-flash-vision-exp`, and a
+   third-party provider serving DeepSeek models matches too). Usage emitted by
+   any other model is skipped by the fold — it is not billable under the
+   DeepSeek tariff — and the running total survives the detour and resumes
+   when DeepSeek comes back; it never restarts. The badges follow the
+   composer's **live** model selection, not just billed requests: switching
+   the picker to a DeepSeek model shows the badge immediately (¥0 in a
+   session with no DeepSeek usage yet), and switching away hides it at once.
+   The client reads that selection from the shared per-session model
+   directory (`@deepseek-ai/dsh-client-ui-model-selection`, which updates the
+   moment the picker commits); if the service is unavailable the badges fall
+   back to the fold's last request/header. For sessions restored from archive
+   the same rule applies to history: a restored DeepSeek-era session shows
+   its badge with the full historical total immediately. Checkpoints
+   persisted before this gating (stateVersion 1, which priced non-DeepSeek
+   usage at the default tier) are discarded and refolded, not extended in
+   place.
 
 ## Pricing table
 
@@ -87,8 +107,10 @@ It is a dual-face dsh.client package:
   session-projection seam. The fold tracks provider/model from request/header
   events and accumulates CNY cost from provider-reported usage buckets (uncached
   input / output / cache-read / cache-write), reusing token-meter's "replace
-  the same (turn, step) sample instead of double-counting" rule. The view
-  exposes whole-session totals plus a byTurn map keyed by turn number.
+  the same (turn, step) sample instead of double-counting" rule. Usage from
+  non-DeepSeek-series models is skipped, and the view exposes a `deepSeek` flag
+  telling the client whether the active model is billable under this tariff.
+  The view exposes whole-session totals plus a byTurn map keyed by turn number.
 - **Client half** (lib/client.js) registers a badge into the
   conversation.chat.assistant-actions slot — the action row at the end of each
   assistant message. Each badge shows that turn's cost; hovering opens a tooltip

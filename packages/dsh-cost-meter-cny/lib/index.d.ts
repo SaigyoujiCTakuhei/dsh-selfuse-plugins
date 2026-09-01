@@ -29,6 +29,10 @@ declare module "@deepseek-ai/dsh-session-projection/types" {
       tier: CostTier;
       /** True once any priced usage has been folded. */
       priced: boolean;
+      /** True when the last request/header carried a DeepSeek-series model; the
+       * client badges use it as the fallback gate when the live picker
+       * selection (modelDirectories) is unavailable. */
+      deepSeek: boolean;
       currency: string;
       timezone: string;
       /** Peak windows as [startHour, endHour) in the pricing timezone. */

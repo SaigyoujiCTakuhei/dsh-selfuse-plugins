@@ -172,6 +172,18 @@ function tierAt(timeMs, pricing) {
   return "offpeak";
 }
 
+/**
+ * Whether the active provider/model is a DeepSeek-series model. The meter
+ * prices under DeepSeek's official tariff only, so usage from anything else is
+ * out of scope. Matching the combined `provider/model` string keeps this
+ * robust: the current environment is `deepseek-official/deepseek-v4-pro`
+ * /`-flash`, and third-party providers serving DeepSeek models
+ * (`<other>/deepseek-...`) still match.
+ */
+function isDeepSeekSeries(provider, model) {
+  return `${provider ?? ""}/${model ?? ""}`.toLowerCase().includes("deepseek");
+}
+
 const costBucketsSchema = z.object({
   total: z.number(),
   input: z.number(),
@@ -186,12 +198,50 @@ const costBucketsSchema = z.object({
 
 const tierSchema = z.enum(["peak", "offpeak"]).nullable();
 
+// Internal fold state. Required by the projection engine's checkpoint paths:
+// restore()/viewCheckpoint() run stateSchema.parse over persisted rows, and a
+// unit without one silently drops out of the cached-read rung (and throws on
+// the restore rung, forcing the full-refold fallback on every cold open).
+const bucketsSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cacheRead: z.number(),
+  cacheWrite: z.number(),
+}).strict();
+const turnSampleSchema = z.object({
+  step: z.number(),
+  buckets: bucketsSchema,
+  cny: bucketsSchema,
+  tier: tierSchema,
+});
+const stateSchema = z
+  .object({
+    totals: bucketsSchema,
+    cny: bucketsSchema,
+    last: turnSampleSchema.extend({ turn: z.number() }).nullable(),
+    byTurn: z.record(
+      z.string(),
+      z.object({
+        buckets: bucketsSchema,
+        cny: bucketsSchema,
+        tier: tierSchema,
+        last: turnSampleSchema.nullable(),
+      }).strict(),
+    ),
+    provider: z.string().nullable(),
+    model: z.string().nullable(),
+    tier: tierSchema,
+    priced: z.boolean(),
+  })
+  .strict();
+
 const sessionCostSchema = costBucketsSchema
   .extend({
     provider: z.string().nullable(),
     model: z.string().nullable(),
     tier: tierSchema,
     priced: z.boolean(),
+    deepSeek: z.boolean(),
     currency: z.string(),
     timezone: z.string(),
     peakHours: z.array(z.tuple([z.number(), z.number()])),
@@ -240,6 +290,7 @@ function makeProjection(pricing) {
 
   return {
     key: "sessionCostCny",
+    stateSchema,
     init: () => ({
       totals: zeroBuckets(),
       cny: zeroCny(),
@@ -270,6 +321,12 @@ function makeProjection(pricing) {
       } else {
         return state;
       }
+
+      // DeepSeek-series models only: usage from any other model is not
+      // billable under this tariff, so it is left out of the fold entirely.
+      // The totals survive the detour, so switching back to a DeepSeek model
+      // resumes the running total instead of restarting it.
+      if (!isDeepSeekSeries(state.provider, state.model)) return state;
 
       const buckets = {
         input: usage.inputTokens ?? 0,
@@ -316,6 +373,7 @@ function makeProjection(pricing) {
         model: state.model,
         tier: state.tier,
         priced: state.priced,
+        deepSeek: isDeepSeekSeries(state.provider, state.model),
         currency: pricing.currency,
         timezone: pricing.timezone,
         peakHours: pricing.peakHours,
@@ -325,7 +383,12 @@ function makeProjection(pricing) {
         ),
       }),
     },
-    stateVersion: 1,
+    // v2: the DeepSeek-series gating changed the fold's semantics — usage
+    // from non-DeepSeek models no longer contributes. Cached v1 rows were
+    // folded under the old everything-counts rule (and priced at DeepSeek's
+    // default tier, since their priceOf had no DeepSeek gate either), so they
+    // must be discarded and refolded, not extended in place.
+    stateVersion: 2,
   };
 }
 

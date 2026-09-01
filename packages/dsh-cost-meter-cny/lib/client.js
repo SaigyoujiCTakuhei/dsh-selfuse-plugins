@@ -161,11 +161,69 @@ window.__ModuleLoader__.load({
       return lines;
     }
 
+    // Real-time composer model selection. The picker seat and the /model popup
+    // share one per-session ModelDirectory (ctx.modelDirectories) whose
+    // snapshot carries the current { provider, model } and updates the moment
+    // the picker commits — no request needed. The context is captured at
+    // apply but the service is resolved LAZILY at first render: module load
+    // order does not guarantee the model-selection service is registered by
+    // then, and a null captured here used to silently pin the badges to the
+    // fold's lagging request/header gate forever.
+    var pluginCtx = null;
+
+    var noopSubscribe = function () { return function () {}; };
+
+    function isDeepSeekSelection(sel) {
+      return !!sel && ((sel.provider || "") + "/" + (sel.model || "")).toLowerCase().indexOf("deepseek") !== -1;
+    }
+
+    // React face of the shared directory: subscribe + getSnapshot, exactly as
+    // the built-in ModelSelect seat consumes it. Resolves the directory once
+    // per component instance; unknown sessions resolve to null (fail-soft).
+    function useSelectedModel(sessionId) {
+      var dirPair = react.useState(function () {
+        if (pluginCtx == null || sessionId == null) return null;
+        try {
+          var dirs = pluginCtx.modelDirectories;
+          if (dirs == null) return null;
+          var d = dirs.directoryFor(sessionId);
+          // The raw directory keeps the reactive face on `.store`
+          // (createSnapshotStore); accept a direct subscribe/getSnapshot face too.
+          var store = d && d.store ? d.store : d;
+          if (!store || !store.subscribe || !store.getSnapshot) return null;
+          return store;
+        } catch (e) {
+          return null;
+        }
+      });
+      var store = dirPair[0];
+      var snap = react.useSyncExternalStore(
+        store ? function (cb) { return store.subscribe(cb); } : noopSubscribe,
+        store ? function () { return store.getSnapshot(); } : function () { return null; }
+      );
+      return (store && snap && snap.current) || null;
+    }
+
+    // Whether a DeepSeek-series model is billable right now. The picker's
+    // live selection wins; before the seat has loaded (or if the
+    // model-selection service is unavailable) fall back to the fold's last
+    // request/header, the pre-selection behaviour.
+    function deepSeekNowOf(props, cost) {
+      var selected = useSelectedModel(props.sessionId);
+      return selected != null ? isDeepSeekSelection(selected) : !!(cost && cost.deepSeek === true);
+    }
+
     // Session total, shown persistently in the session header utilities.
     function SessionCostBadge(props) {
       var cost = props.useProjection ? props.useProjection("sessionCostCny") : void 0;
       var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone, cost && cost.peakDays);
-      if (!cost || cost.priced !== true) return null;
+      var deepSeekNow = deepSeekNowOf(props, cost);
+      // Visible while a DeepSeek-series model is selected — switching to
+      // DeepSeek shows the badge at once (¥0 in a session with no DeepSeek
+      // usage yet), and switching away hides it immediately. The host half
+      // skips pricing non-DeepSeek samples, so the total resumes (not
+      // restarts) when DeepSeek comes back.
+      if (!cost || !deepSeekNow) return null;
       var label = formatCny(cost.total);
       if (label === null) return null;
       var lines = bucketLines("session: " + label, cost, cost);
@@ -183,8 +241,9 @@ window.__ModuleLoader__.load({
       var cost = useProjection ? useProjection("sessionCostCny") : void 0;
       var nodes = useSession ? useSession(function (s) { return s ? s.nodes : void 0; }) : void 0;
       var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone, cost && cost.peakDays);
+      var deepSeekNow = deepSeekNowOf(props, cost);
 
-      if (!cost || cost.priced !== true) return null;
+      if (!cost || !deepSeekNow) return null;
 
       var turn = null;
       if (nodes && messageId != null) {
@@ -206,9 +265,14 @@ window.__ModuleLoader__.load({
       return react.createElement(CostChip, { label: label, lines: lines, tier: currentTier });
     }
 
-    var inject = ["slots"];
+    // "modelDirectories" must be DECLARED here: cordis rejects property access
+    // to undeclared services ("cannot get property ... without inject"), and
+    // declaring it also makes cordis wait for the service before calling
+    // apply — the model-selection module ships in every web composition.
+    var inject = ["slots", "modelDirectories"];
 
     function apply(ctx) {
+      pluginCtx = ctx;
       ctx.slots.inject("conversation.session.header.utilities", () => {
         ctx.slots.register({
           name: "conversation.session.header.utilities",
