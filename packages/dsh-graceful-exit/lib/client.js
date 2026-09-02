@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
     var react = require("react");
 
     var css =
-      ".dge-fab{position:fixed;right:16px;bottom:16px;z-index:30}.dge-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--dsw-alias-border-l1,#e5e7eb);background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-secondary,#6b7280);font-size:12px;font-weight:500;line-height:1;padding:6px 10px;border-radius:10px;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;box-shadow:0 4px 16px rgba(0,0,0,.12);transition:color .15s,border-color .15s,background .15s}.dge-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.04));color:var(--dsw-alias-label-primary,#111827)}.dge-btn:focus-visible{outline:1px solid var(--dsw-alias-border-l1,#e5e7eb);outline-offset:1px}.dge-armed{border-color:var(--dsw-alias-state-error-primary,#dc2626);color:var(--dsw-alias-state-error-primary,#dc2626)}.dge-armed:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.04));color:var(--dsw-alias-state-error-primary,#dc2626)}.dge-exiting{opacity:.6;cursor:default}.dge-bye{position:fixed;inset:0;z-index:40;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#111827);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px}.dge-bye-title{font-size:20px;font-weight:600}.dge-bye-sub{font-size:14px;color:var(--dsw-alias-label-secondary,#6b7280)}.dge-bye-hint{font-size:12px;color:var(--dsw-alias-label-tertiary,#9ca3af)}";
+      ".dge-fab{position:fixed;right:16px;bottom:16px;z-index:30}.dge-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--dsw-alias-border-l1,#e5e7eb);background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-secondary,#6b7280);font-size:12px;font-weight:500;line-height:1;padding:6px 10px;border-radius:10px;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;box-shadow:0 4px 16px rgba(0,0,0,.12);transition:color .15s,border-color .15s,background .15s}.dge-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.04));color:var(--dsw-alias-label-primary,#111827)}.dge-btn:focus-visible{outline:1px solid var(--dsw-alias-border-l1,#e5e7eb);outline-offset:1px}.dge-failed{border-color:var(--dsw-alias-state-error-primary,#dc2626);color:var(--dsw-alias-state-error-primary,#dc2626)}.dge-exiting{opacity:.6;cursor:default}.dge-bye{position:fixed;inset:0;z-index:40;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#111827);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px}.dge-bye-title{font-size:20px;font-weight:600}.dge-bye-sub{font-size:14px;color:var(--dsw-alias-label-secondary,#6b7280)}.dge-bye-hint{font-size:12px;color:var(--dsw-alias-label-tertiary,#9ca3af)}";
     var tagId = "dsh-graceful-exit/button.css";
     if (
       typeof document !== "undefined" &&
@@ -22,12 +22,14 @@ window.__ModuleLoader__.load({
 
     var ROUTE = "/api/dsh-graceful-exit/shutdown";
 
-    // Two-stage confirm, then POST the loopback shutdown route. On success the
-    // host acks first and SIGINTs itself right after. Browsers forbid closing
-    // a tab the user opened themselves, so "close the tab" is best-effort:
-    // try window.close() once (works only for script-opened tabs), and take
-    // over the page with a farewell screen otherwise so the dead server never
-    // shows as a broken reconnecting UI. Failure path re-arms as before.
+    // Click → native confirm() dialog (same UX as the New_Architecture_v00
+    // dashboard's shutdown module: browser popup with 确定/取消) → POST the
+    // loopback shutdown route. On success the host acks first and SIGINTs
+    // itself right after. Browsers forbid closing a tab the user opened
+    // themselves, so "close the tab" is best-effort: try window.close() once
+    // (works only for script-opened tabs), and take over the page with a
+    // farewell screen otherwise so the dead server never shows as a broken
+    // reconnecting UI. Failure keeps the fab and shows 退出失败 briefly.
     function ExitButton() {
       var phaseState = react.useState("idle");
       var phase = phaseState[0];
@@ -40,7 +42,7 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
-      function armTimer() {
+      function revertSoon() {
         if (timerRef.current !== null) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(function () {
           setPhase("idle");
@@ -49,11 +51,8 @@ window.__ModuleLoader__.load({
 
       function onClick() {
         if (phase === "exiting" || phase === "done") return;
-        if (phase !== "armed") {
-          setPhase("armed");
-          armTimer();
-          return;
-        }
+        var ok = window.confirm("确定要优雅退出 dsh 吗？（等价于终端 Ctrl+C，成功后本页显示告别屏）");
+        if (!ok) return;
         if (timerRef.current !== null) clearTimeout(timerRef.current);
         setPhase("exiting");
         fetch(ROUTE, { method: "POST", cache: "no-store" })
@@ -71,7 +70,7 @@ window.__ModuleLoader__.load({
           })
           .catch(function () {
             setPhase("failed");
-            armTimer();
+            revertSoon();
           });
       }
 
@@ -86,17 +85,9 @@ window.__ModuleLoader__.load({
       }
 
       var label =
-        phase === "armed"
-          ? "确认退出？"
-          : phase === "exiting"
-            ? "正在退出…"
-            : phase === "failed"
-              ? "退出失败"
-              : "⏻ 退出";
+        phase === "exiting" ? "正在退出…" : phase === "failed" ? "退出失败" : "⏻ 退出";
       var cls =
-        "dge-btn" +
-        (phase === "armed" || phase === "failed" ? " dge-armed" : "") +
-        (phase === "exiting" ? " dge-exiting" : "");
+        "dge-btn" + (phase === "failed" ? " dge-failed" : "") + (phase === "exiting" ? " dge-exiting" : "");
       var btn = react.createElement(
         "button",
         {
