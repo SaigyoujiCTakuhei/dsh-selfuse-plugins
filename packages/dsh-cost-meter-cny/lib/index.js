@@ -29,7 +29,7 @@ const inject = ["sessionProjections"];
 const PER = 1_000_000;
 
 const DEFAULT_PRICING = {
-  version: 2,
+  version: 3,
   currency: "CNY",
   per: PER,
   timezone: "Asia/Shanghai",
@@ -58,6 +58,19 @@ const DEFAULT_PRICING = {
       peak: { input: 3.0, output: 9.0, cacheRead: 0.1, cacheWrite: 0 },
     },
   },
+  // GLM Coding Plan (bigmodel.cn) billing: subscription credit quota, not CNY.
+  // credits = (input×in + cacheRead×cr + output×out) / divisor, off-peak ×0.5.
+  // Peak = Mon–Fri 14:00–18:00 (Asia/Shanghai). Cache-write has no coefficient.
+  zhipu: {
+    divisor: 10000,
+    offpeakFactor: 0.5,
+    peakHours: [[14, 18]],
+    peakDays: [1, 2, 3, 4, 5],
+    groups: {
+      "glm-5.3": { input: 6.9, cacheRead: 1.7, output: 24 },
+      "glm-5.3-flash": { input: 2.3, cacheRead: 0.56, output: 8 },
+    },
+  },
 };
 
 function defaultPricingPath() {
@@ -81,6 +94,31 @@ function coerceTier(entry) {
   return { offpeak: { ...flat }, peak: { ...flat } };
 }
 
+/** Coerce the zhipu (GLM Coding Plan) section with built-in defaults for anything absent. */
+function normalizeZhipu(doc) {
+  const d = doc && typeof doc === "object" ? doc : {};
+  const peakHours = Array.isArray(d.peakHours) && d.peakHours.length > 0
+    ? d.peakHours.filter((r) => Array.isArray(r) && r.length === 2).map((r) => [Number(r[0]), Number(r[1])])
+    : DEFAULT_PRICING.zhipu.peakHours;
+  const rawPeakDays = Array.isArray(d.peakDays)
+    ? d.peakDays.filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+    : null;
+  const groups = {};
+  const raw = d.groups && typeof d.groups === "object" ? d.groups : DEFAULT_PRICING.zhipu.groups;
+  for (const [key, g] of Object.entries(raw)) {
+    groups[key] = { input: Number(g.input) || 0, cacheRead: Number(g.cacheRead) || 0, output: Number(g.output) || 0 };
+  }
+  return {
+    divisor: typeof d.divisor === "number" && d.divisor > 0 ? d.divisor : DEFAULT_PRICING.zhipu.divisor,
+    offpeakFactor: typeof d.offpeakFactor === "number" && d.offpeakFactor > 0 && d.offpeakFactor <= 1
+      ? d.offpeakFactor
+      : DEFAULT_PRICING.zhipu.offpeakFactor,
+    peakHours,
+    peakDays: rawPeakDays && rawPeakDays.length > 0 ? rawPeakDays : null,
+    groups,
+  };
+}
+
 /** Coerce a parsed pricing document into the runtime shape with numeric per-key defaults. */
 function normalizePricing(doc) {
   const per = typeof doc?.per === "number" && doc.per > 0 ? doc.per : PER;
@@ -101,7 +139,7 @@ function normalizePricing(doc) {
   if (raw && typeof raw === "object") {
     for (const [key, entry] of Object.entries(raw)) models[key] = coerceTier(entry);
   }
-  return { per, currency, timezone, peakHours, peakDays, default: defaultTier, models };
+  return { per, currency, timezone, peakHours, peakDays, default: defaultTier, models, zhipu: normalizeZhipu(doc?.zhipu) };
 }
 
 function loadPricing(path) {
@@ -184,6 +222,34 @@ function isDeepSeekSeries(provider, model) {
   return `${provider ?? ""}/${model ?? ""}`.toLowerCase().includes("deepseek");
 }
 
+/**
+ * Which tariff family the active provider/model belongs to: "deepseek" (CNY
+ * per-M-token, peak/off-peak), "zhipu" (GLM Coding Plan credit quota), or null
+ * (unknown — not billable under either tariff, badges hide). Order matters:
+ * deepseek is checked first so a DeepSeek provider id containing a stray
+ * substring can never fall into the zhipu bucket.
+ */
+function classifyFamily(provider, model) {
+  const hay = `${provider ?? ""}/${model ?? ""}`.toLowerCase();
+  if (hay.includes("deepseek")) return "deepseek";
+  if (hay.includes("glm") || hay.includes("zhipu") || hay.includes("bigmodel")) return "zhipu";
+  return null;
+}
+
+/**
+ * Pick the GLM Coding Plan coefficient group for a model id. The plan has two
+ * groups and maps older models onto them: GLM-5.2/5.1 → glm-5.3 coefficients,
+ * GLM-5-Turbo/4.7 → glm-5.3-flash coefficients. Anything Flash/Turbo-flavoured
+ * rides the cheap group; unknown GLM ids conservatively ride glm-5.3.
+ */
+function zhipuGroupOf(model, zhipu) {
+  const m = `${model ?? ""}`.toLowerCase();
+  if (m.includes("flash") || m.includes("turbo") || m.includes("4.7")) {
+    return zhipu.groups["glm-5.3-flash"] ?? zhipu.groups["glm-5.3"];
+  }
+  return zhipu.groups["glm-5.3"];
+}
+
 const costBucketsSchema = z.object({
   total: z.number(),
   input: z.number(),
@@ -214,44 +280,56 @@ const turnSampleSchema = z.object({
   cny: bucketsSchema,
   tier: tierSchema,
 });
+const familyEnum = z.enum(["deepseek", "zhipu"]);
+const familyStateSchema = z.object({
+  totals: bucketsSchema,
+  cny: bucketsSchema,
+  last: turnSampleSchema.extend({ turn: z.number() }).nullable(),
+  byTurn: z.record(
+    z.string(),
+    z.object({
+      buckets: bucketsSchema,
+      cny: bucketsSchema,
+      tier: tierSchema,
+      last: turnSampleSchema.nullable(),
+    }).strict(),
+  ),
+  tier: tierSchema,
+  priced: z.boolean(),
+}).strict();
 const stateSchema = z
   .object({
-    totals: bucketsSchema,
-    cny: bucketsSchema,
-    last: turnSampleSchema.extend({ turn: z.number() }).nullable(),
-    byTurn: z.record(
-      z.string(),
-      z.object({
-        buckets: bucketsSchema,
-        cny: bucketsSchema,
-        tier: tierSchema,
-        last: turnSampleSchema.nullable(),
-      }).strict(),
-    ),
     provider: z.string().nullable(),
     model: z.string().nullable(),
-    tier: tierSchema,
+    families: z.object({ deepseek: familyStateSchema, zhipu: familyStateSchema }).strict(),
     priced: z.boolean(),
   })
   .strict();
 
 const sessionCostSchema = costBucketsSchema
   .extend({
+    family: familyEnum.nullable(),
+    currency: z.string(),
     provider: z.string().nullable(),
     model: z.string().nullable(),
     tier: tierSchema,
     priced: z.boolean(),
-    deepSeek: z.boolean(),
-    currency: z.string(),
+    currencyByFamily: z.record(z.string(), z.string()),
+    totalByFamily: z.record(z.string(), z.number()),
+    peakHoursByFamily: z.record(z.string(), z.array(z.tuple([z.number(), z.number()]))),
+    peakDaysByFamily: z.record(z.string(), z.array(z.number()).nullable()),
+    byFamily: z.record(familyEnum, costBucketsSchema.extend({ tier: tierSchema })),
     timezone: z.string(),
     peakHours: z.array(z.tuple([z.number(), z.number()])),
     peakDays: z.array(z.number()).nullable(),
-    byTurn: z.record(z.string(), costBucketsSchema.extend({ tier: tierSchema })),
+    byTurn: z.record(z.string(), costBucketsSchema.extend({ tier: tierSchema, family: familyEnum })),
   })
   .strict();
 
 function makeProjection(pricing) {
-  const { per, default: defaultTier, models } = pricing;
+  const { per, default: defaultTier, models, zhipu: z } = pricing;
+  const FAMILY_NAMES = ["deepseek", "zhipu"];
+  const CURRENCY_BY_FAMILY = { deepseek: "CNY", zhipu: "积分" };
 
   function priceOf(provider, model, tier) {
     const key = provider && model ? `${provider}/${model}` : null;
@@ -261,6 +339,7 @@ function makeProjection(pricing) {
 
   const zeroBuckets = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   const zeroCny = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+  const zeroFamilyState = () => ({ totals: zeroBuckets(), cny: zeroCny(), last: null, byTurn: {}, tier: null, priced: false });
 
   const cnyFor = (buckets, price) => ({
     input: (buckets.input * price.input) / per,
@@ -268,6 +347,20 @@ function makeProjection(pricing) {
     cacheRead: (buckets.cacheRead * price.cacheRead) / per,
     cacheWrite: (buckets.cacheWrite * price.cacheWrite) / per,
   });
+
+  // GLM Coding Plan credits for one usage sample. Credits = Σ(tokens ×
+  // coefficient) / divisor, multiplied by 0.5 outside peak windows. Cache
+  // writes carry no coefficient in the plan.
+  function zhipuCreditsFor(buckets, tier, model) {
+    const g = zhipuGroupOf(model, z);
+    const factor = tier === "peak" ? 1 : z.offpeakFactor;
+    return {
+      input: (buckets.input * g.input) / z.divisor * factor,
+      output: (buckets.output * g.output) / z.divisor * factor,
+      cacheRead: (buckets.cacheRead * g.cacheRead) / z.divisor * factor,
+      cacheWrite: 0,
+    };
+  }
 
   const addReplacing = (totals, previous, next) => ({
     input: totals.input - (previous?.input ?? 0) + next.input,
@@ -288,17 +381,18 @@ function makeProjection(pricing) {
     cacheWriteTokens: buckets.cacheWrite,
   });
 
+  const windowsOf = (family) =>
+    family === "zhipu"
+      ? { peakHours: z.peakHours, peakDays: z.peakDays }
+      : { peakHours: pricing.peakHours, peakDays: pricing.peakDays };
+
   return {
     key: "sessionCostCny",
     stateSchema,
     init: () => ({
-      totals: zeroBuckets(),
-      cny: zeroCny(),
-      last: null,
-      byTurn: {},
       provider: null,
       model: null,
-      tier: null,
+      families: { deepseek: zeroFamilyState(), zhipu: zeroFamilyState() },
       priced: false,
     }),
     apply: (state, event) => {
@@ -322,11 +416,13 @@ function makeProjection(pricing) {
         return state;
       }
 
-      // DeepSeek-series models only: usage from any other model is not
-      // billable under this tariff, so it is left out of the fold entirely.
-      // The totals survive the detour, so switching back to a DeepSeek model
-      // resumes the running total instead of restarting it.
-      if (!isDeepSeekSeries(state.provider, state.model)) return state;
+      // Only usage from a recognised tariff family is billable; anything else
+      // (unknown providers/models) is left out of every ledger. Each family
+      // keeps its own ledger — CNY and credits must never mix into one total —
+      // so switching models mid-session switches ledgers without losing either.
+      const family = classifyFamily(state.provider, state.model);
+      if (!family) return state;
+      const fs = state.families[family];
 
       const buckets = {
         input: usage.inputTokens ?? 0,
@@ -334,18 +430,22 @@ function makeProjection(pricing) {
         cacheRead: usage.cacheReadTokens ?? 0,
         cacheWrite: usage.cacheWriteTokens ?? 0,
       };
-      const tier = tierAt(event.time, pricing);
-      const contribution = cnyFor(buckets, priceOf(state.provider, state.model, tier));
+      const windows = windowsOf(family);
+      const tier = tierAt(event.time, { timezone: pricing.timezone, peakHours: windows.peakHours, peakDays: windows.peakDays });
+      const contribution = family === "deepseek"
+        ? cnyFor(buckets, priceOf(state.provider, state.model, tier))
+        : zhipuCreditsFor(buckets, tier, state.model);
 
-      // Whole-session fold: replace the same (turn, step) sample.
+      // Whole-session fold (scoped to this family): replace the same
+      // (turn, step) sample.
       const previous =
-        state.last !== null && state.last.turn === turn && state.last.step === step ? state.last : void 0;
-      const totals = addReplacing(state.totals, previous?.buckets, buckets);
-      const cny = addReplacing(state.cny, previous?.cny, contribution);
+        fs.last !== null && fs.last.turn === turn && fs.last.step === step ? fs.last : void 0;
+      const totals = addReplacing(fs.totals, previous?.buckets, buckets);
+      const cny = addReplacing(fs.cny, previous?.cny, contribution);
 
       // Per-turn fold: replace the same step sample within its turn.
       const tKey = String(turn);
-      const t = state.byTurn[tKey] ?? { buckets: zeroBuckets(), cny: zeroCny(), last: null, tier: null };
+      const t = fs.byTurn[tKey] ?? { buckets: zeroBuckets(), cny: zeroCny(), last: null, tier: null };
       const tPrevious = t.last !== null && t.last.step === step ? t.last : void 0;
       const tBuckets = addReplacing(t.buckets, tPrevious?.buckets, buckets);
       const tCny = addReplacing(t.cny, tPrevious?.cny, contribution);
@@ -354,41 +454,77 @@ function makeProjection(pricing) {
 
       return {
         ...state,
-        totals,
-        cny,
-        tier,
-        last: { turn, step, buckets, cny: contribution, tier },
-        byTurn: {
-          ...state.byTurn,
-          [tKey]: { buckets: tBuckets, cny: tCny, tier, last: { step, buckets, cny: contribution, tier } },
+        families: {
+          ...state.families,
+          [family]: {
+            totals,
+            cny,
+            tier,
+            last: { turn, step, buckets, cny: contribution, tier },
+            byTurn: {
+              ...fs.byTurn,
+              [tKey]: { buckets: tBuckets, cny: tCny, tier, last: { step, buckets, cny: contribution, tier } },
+            },
+            priced: fs.priced || anyUsage,
+          },
         },
         priced: state.priced || anyUsage,
       };
     },
     wire: {
       viewSchema: sessionCostSchema,
-      view: (state) => ({
-        ...bucketsView(state.totals, state.cny),
-        provider: state.provider,
-        model: state.model,
-        tier: state.tier,
-        priced: state.priced,
-        deepSeek: isDeepSeekSeries(state.provider, state.model),
-        currency: pricing.currency,
-        timezone: pricing.timezone,
-        peakHours: pricing.peakHours,
-        peakDays: pricing.peakDays,
-        byTurn: Object.fromEntries(
-          Object.entries(state.byTurn).map(([turn, t]) => [turn, { ...bucketsView(t.buckets, t.cny), tier: t.tier }]),
-        ),
-      }),
+      view: (state) => {
+        const family = classifyFamily(state.provider, state.model);
+        const cur = family ? state.families[family] : zeroFamilyState();
+        const windows = windowsOf(family);
+
+        const byFamily = {};
+        const totalByFamily = {};
+        const peakHoursByFamily = {};
+        const peakDaysByFamily = {};
+        for (const f of FAMILY_NAMES) {
+          const fs = state.families[f];
+          byFamily[f] = { ...bucketsView(fs.totals, fs.cny), tier: fs.tier };
+          totalByFamily[f] = fs.cny.input + fs.cny.output + fs.cny.cacheRead + fs.cny.cacheWrite;
+          const w = windowsOf(f);
+          peakHoursByFamily[f] = w.peakHours;
+          peakDaysByFamily[f] = w.peakDays;
+        }
+
+        // Per-turn costs merged across families — one turn runs on one model,
+        // so each entry is tagged with the family that priced it and the
+        // client formats it in that family's currency.
+        const byTurn = {};
+        for (const f of FAMILY_NAMES) {
+          for (const [turn, t] of Object.entries(state.families[f].byTurn)) {
+            byTurn[turn] = { ...bucketsView(t.buckets, t.cny), tier: t.tier, family: f };
+          }
+        }
+
+        return {
+          ...bucketsView(cur.totals, cur.cny),
+          family,
+          currency: family ? CURRENCY_BY_FAMILY[family] : "",
+          provider: state.provider,
+          model: state.model,
+          tier: cur.tier,
+          priced: state.priced,
+          currencyByFamily: CURRENCY_BY_FAMILY,
+          totalByFamily,
+          peakHoursByFamily,
+          peakDaysByFamily,
+          byFamily,
+          timezone: pricing.timezone,
+          peakHours: windows.peakHours,
+          peakDays: windows.peakDays,
+          byTurn,
+        };
+      },
     },
-    // v2: the DeepSeek-series gating changed the fold's semantics — usage
-    // from non-DeepSeek models no longer contributes. Cached v1 rows were
-    // folded under the old everything-counts rule (and priced at DeepSeek's
-    // default tier, since their priceOf had no DeepSeek gate either), so they
-    // must be discarded and refolded, not extended in place.
-    stateVersion: 2,
+    // v3: per-family ledgers (deepseek CNY + zhipu credits). v2/v1 checkpoints
+    // were folded with skip-non-DeepSeek semantics and a single accumulator —
+    // they cannot be extended in place, so they are discarded and refolded.
+    stateVersion: 3,
   };
 }
 

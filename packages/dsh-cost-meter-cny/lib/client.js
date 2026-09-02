@@ -23,21 +23,35 @@ window.__ModuleLoader__.load({
       return "¥" + n.toFixed(6);
     }
 
+    // Family-aware amount formatting: DeepSeek ledgers are CNY, GLM Coding
+    // Plan ledgers are subscription credits (积分).
+    function formatAmount(n, family) {
+      if (typeof n !== "number" || !Number.isFinite(n)) return null;
+      if (family === "zhipu") {
+        if (n >= 1) return n.toFixed(2) + " 积分";
+        if (n >= 0.01) return n.toFixed(4) + " 积分";
+        if (n === 0) return "0.00 积分";
+        return n.toFixed(6) + " 积分";
+      }
+      return formatCny(n);
+    }
+
     function pad2(n) {
       n = Number(n);
       return (n < 10 ? "0" : "") + n;
     }
 
-    function tierLabel(tier) {
-      return tier === "peak" ? "高峰时段" : "空闲时段";
+    function tierLabel(family, tier) {
+      if (tier === "peak") return "高峰时段";
+      return family === "zhipu" ? "非高峰时段 (积分半价)" : "空闲时段";
     }
 
-    function peakText(cost) {
+    function peakText(family, cost) {
       if (!cost || !Array.isArray(cost.peakHours)) return "";
       var hours = cost.peakHours.map(function (r) {
         return pad2(r[0]) + ":00-" + pad2(r[1]) + ":00";
       }).join(", ");
-      return "tier        " + tierLabel(cost.tier) + (hours ? "  (高峰 " + hours + " " + (cost.timezone || "") + ")" : "");
+      return "tier        " + tierLabel(family, cost.tier) + (hours ? "  (高峰 " + hours + " " + (cost.timezone || "") + ")" : "");
     }
 
     // Real-time tier helpers. These answer "what is the tier RIGHT NOW" (the
@@ -148,15 +162,16 @@ window.__ModuleLoader__.load({
       }, props.label, tierTag, tip);
     }
 
-    function bucketLines(head, c, cost) {
+    function bucketLines(head, c, cost, family) {
+      var f = function (n) { return formatAmount(n, family) || "—"; };
       var lines = [
         head,
-        "input        " + formatCny(c.input) + "   (" + c.inputTokens + " tok)",
-        "output      " + formatCny(c.output) + "   (" + c.outputTokens + " tok)",
-        "cache-read  " + formatCny(c.cacheRead) + "   (" + c.cacheReadTokens + " tok)",
-        "cache-write " + formatCny(c.cacheWrite) + "   (" + c.cacheWriteTokens + " tok)",
+        "input        " + f(c.input) + "   (" + c.inputTokens + " tok)",
+        "output      " + f(c.output) + "   (" + c.outputTokens + " tok)",
+        "cache-read  " + f(c.cacheRead) + "   (" + c.cacheReadTokens + " tok)",
+        "cache-write " + f(c.cacheWrite) + "   (" + c.cacheWriteTokens + " tok)",
       ];
-      var tier = peakText(cost);
+      var tier = peakText(family, cost);
       if (tier) lines.push(tier);
       return lines;
     }
@@ -172,10 +187,6 @@ window.__ModuleLoader__.load({
     var pluginCtx = null;
 
     var noopSubscribe = function () { return function () {}; };
-
-    function isDeepSeekSelection(sel) {
-      return !!sel && ((sel.provider || "") + "/" + (sel.model || "")).toLowerCase().indexOf("deepseek") !== -1;
-    }
 
     // React face of the shared directory: subscribe + getSnapshot, exactly as
     // the built-in ModelSelect seat consumes it. Resolves the directory once
@@ -208,31 +219,55 @@ window.__ModuleLoader__.load({
     // live selection wins; before the seat has loaded (or if the
     // model-selection service is unavailable) fall back to the fold's last
     // request/header, the pre-selection behaviour.
-    function deepSeekNowOf(props, cost) {
+    function classifyFamilySel(sel) {
+      if (!sel) return null;
+      var hay = ((sel.provider || "") + "/" + (sel.model || "")).toLowerCase();
+      if (hay.indexOf("deepseek") !== -1) return "deepseek";
+      if (hay.indexOf("glm") !== -1 || hay.indexOf("zhipu") !== -1 || hay.indexOf("bigmodel") !== -1) return "zhipu";
+      return null;
+    }
+
+    function familyNowOf(props, cost) {
       var selected = useSelectedModel(props.sessionId);
-      return selected != null ? isDeepSeekSelection(selected) : !!(cost && cost.deepSeek === true);
+      // The live picker is authoritative whenever it has a selection — even
+      // when that selection classifies as unknown (badges must hide, not fall
+      // back to the fold's stale family). The fold only covers the window
+      // before the directory has loaded a selection at all.
+      if (selected != null) return classifyFamilySel(selected);
+      return (cost && cost.family) || null;
     }
 
     // Session total, shown persistently in the session header utilities.
     function SessionCostBadge(props) {
       var cost = props.useProjection ? props.useProjection("sessionCostCny") : void 0;
-      var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone, cost && cost.peakDays);
-      var deepSeekNow = deepSeekNowOf(props, cost);
-      // Visible while a DeepSeek-series model is selected — switching to
-      // DeepSeek shows the badge at once (¥0 in a session with no DeepSeek
-      // usage yet), and switching away hides it immediately. The host half
-      // skips pricing non-DeepSeek samples, so the total resumes (not
-      // restarts) when DeepSeek comes back.
-      if (!cost || !deepSeekNow) return null;
-      var label = formatCny(cost.total);
+      var familyNow = familyNowOf(props, cost);
+      var famWindows = (familyNow && cost && cost.peakHoursByFamily && cost.peakHoursByFamily[familyNow]) || (cost && cost.peakHours) || null;
+      var famPeakDays = (familyNow && cost && cost.peakDaysByFamily && cost.peakDaysByFamily[familyNow]) || (cost && cost.peakDays) || null;
+      var currentTier = useNowTier(famWindows, cost && cost.timezone, famPeakDays);
+      // Ledger of the family on deck: switching to GLM shows the credit
+      // ledger (0 积分 in a session with no GLM usage yet), switching to
+      // DeepSeek shows the CNY ledger, anything unknown hides both. Each
+      // family's total survives the detour — ledgers never mix or reset.
+      var famLedger = (familyNow && cost && cost.byFamily && cost.byFamily[familyNow]) || null;
+      if (!cost || !familyNow || !famLedger) return null;
+      var label = formatAmount(famLedger.total, familyNow);
       if (label === null) return null;
-      var lines = bucketLines("session: " + label, cost, cost);
+      var lines = bucketLines("session: " + label, famLedger, famLedger, familyNow);
       if (cost.model) lines.push(cost.provider + "/" + cost.model);
-      if (currentTier) lines.push("现在        " + tierLabel(currentTier) + " (实时)");
+      if (currentTier) lines.push("现在        " + tierLabel(familyNow, currentTier) + " (实时)");
+      var tbf = cost.totalByFamily;
+      if (tbf) {
+        var parts = [];
+        if (tbf.deepseek > 0) parts.push("DeepSeek " + formatAmount(tbf.deepseek, "deepseek"));
+        if (tbf.zhipu > 0) parts.push("智谱 " + formatAmount(tbf.zhipu, "zhipu"));
+        if (parts.length > 0) lines.push("本会话累计   " + parts.join(" · "));
+      }
       return react.createElement(CostChip, { label: label, lines: lines, tier: currentTier });
     }
 
-    // Per-turn cost, shown at the end of each assistant message.
+    // Per-turn cost, shown at the end of each assistant message. One turn
+    // runs on one model, so the view tags each turn with the family that
+    // priced it and this badge formats it in that family's currency.
     function TurnCostBadge(props) {
       var useProjection = props.useProjection;
       var useSession = props.useSession;
@@ -240,10 +275,7 @@ window.__ModuleLoader__.load({
 
       var cost = useProjection ? useProjection("sessionCostCny") : void 0;
       var nodes = useSession ? useSession(function (s) { return s ? s.nodes : void 0; }) : void 0;
-      var currentTier = useNowTier(cost && cost.peakHours, cost && cost.timezone, cost && cost.peakDays);
-      var deepSeekNow = deepSeekNowOf(props, cost);
-
-      if (!cost || !deepSeekNow) return null;
+      var familyNow = familyNowOf(props, cost);
 
       var turn = null;
       if (nodes && messageId != null) {
@@ -253,14 +285,20 @@ window.__ModuleLoader__.load({
         }
       }
 
-      var t = turn != null && cost.byTurn ? cost.byTurn[String(turn)] : void 0;
+      var t = turn != null && cost && cost.byTurn ? cost.byTurn[String(turn)] : void 0;
+      var tFamily = (t && t.family) || familyNow || "deepseek";
+      var famWindows = (cost && cost.peakHoursByFamily && cost.peakHoursByFamily[tFamily]) || (cost && cost.peakHours) || null;
+      var famPeakDays = (cost && cost.peakDaysByFamily && cost.peakDaysByFamily[tFamily]) || (cost && cost.peakDays) || null;
+      var currentTier = useNowTier(famWindows, cost && cost.timezone, famPeakDays);
+
+      if (!cost || !familyNow) return null;
       if (!t || t.total <= 0) return null;
-      var label = formatCny(t.total);
+      var label = formatAmount(t.total, tFamily);
       if (label === null) return null;
 
-      var lines = bucketLines("turn " + turn + ": " + label, t, t);
-      lines.push("session     " + formatCny(cost.total));
-      if (currentTier) lines.push("现在        " + tierLabel(currentTier) + " (实时)");
+      var lines = bucketLines("turn " + turn + ": " + label, t, t, tFamily);
+      lines.push("session     " + (formatAmount(cost.totalByFamily ? cost.totalByFamily[tFamily] : cost.total, tFamily) || "—"));
+      if (currentTier) lines.push("现在        " + tierLabel(tFamily, currentTier) + " (实时)");
 
       return react.createElement(CostChip, { label: label, lines: lines, tier: currentTier });
     }
