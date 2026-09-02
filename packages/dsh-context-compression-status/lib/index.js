@@ -9,7 +9,17 @@
  *    *successful* compaction, so counting it yields the real compression count.
  *
  * 2. A loopback-only HTTP route `/api/dsh-context-compression/status` that
- *    surfaces that value to the browser. This is necessary because
+ *    surfaces that value — plus the effective AUTO-compaction threshold — to
+ *    the browser. The trigger point is `floor(contextWindow * ratio)` against
+ *    the routed target the session's last `request/context` event records;
+ *    the ratio is dsh's default `thresholdRatio` (0.8), mirrored as a
+ *    constant because on the web surface `compaction-basic` is DISABLED on
+ *    the host plane and mounted inside per-session agent-preset realms
+ *    instead — a host plugin can neither inject nor `ctx.get` that instance
+ *    (declaring it only parks this plugin forever: boot fails with
+ *    "waiting for service: compaction"). The default IS the effective policy
+ *    for this deployment: every shipped preset and the user's own presets
+ *    mount `compaction-basic` with no config. This is necessary because
  *    `dsh-client-connection` only forwards a HARDCODED allowlist of projection
  *    keys to the client (`contextPressure`, `tokenUsage`, `contextBreakdown`,
  *    `sessionStats`, …) — a custom plugin projection registered via
@@ -20,9 +30,13 @@
  * The unit carries a `wire` block (`viewSchema` + `view`) because, since dsh
  * 0.1.1-rc.2, the session-projection registry reads
  * `wire.viewSchema.parse(wire.view(state))` on every snapshot/restore. The old
- * top-level `schema`/`view` keys are ignored. We hand-roll `viewSchema.parse`
+ * top-level `schema`/`view` keys are ignored. Both schemas are hand-rolled
  * (no `zod`) so the host half stays dependency-free and resolves cleanly even
- * when the package is symlinked into a profile.
+ * when the package is symlinked into a profile. The `stateSchema` is not
+ * optional hygiene either: `registry.restore()` calls
+ * `stateSchema.parse(row.val)` on a version-matched cached row, so a unit
+ * without one turns every warm cold-read into a thrown TypeError and a full
+ * log re-read (the slow rung of `coldSnapshot`'s ladder).
  */
 const name = "dsh-context-compression-status";
 const inject = ["sessionProjections", "webServer", "sessions", "sessionProjectionCache"];
@@ -59,7 +73,73 @@ function parse(value) {
       shadowedEnd: lc.shadowedEnd == null ? null : Number(lc.shadowedEnd),
     };
   }
-  return { compactionCount: count, compressed, lastCompaction: last };
+  let routed = null;
+  if (value.routed !== null && value.routed !== undefined) {
+    if (typeof value.routed !== "object") {
+      throw new Error("contextCompaction: routed must be an object or null");
+    }
+    const r = value.routed;
+    if (typeof r.provider !== "string" || r.provider === "" || typeof r.model !== "string" || r.model === "") {
+      throw new Error("contextCompaction: routed must carry non-empty provider/model");
+    }
+    routed = {
+      provider: r.provider,
+      model: r.model,
+      contextWindow: typeof r.contextWindow === "number" && Number.isFinite(r.contextWindow) ? r.contextWindow : null,
+    };
+  }
+  return { compactionCount: count, compressed, lastCompaction: last, routed };
+}
+
+/**
+ * Validate/normalize a persisted fold state. Registered as the unit's
+ * `stateSchema.parse` — the registry runs it on every version-matched cached
+ * row during cold restore, and on malformed rows a throw is the correct
+ * outcome (the row is discarded and the key refolds from `init`).
+ * @param value - the raw fold state.
+ * @returns the validated state.
+ */
+function parseState(value) {
+  if (value === null || typeof value !== "object") {
+    throw new Error("contextCompaction: state must be an object");
+  }
+  const count = Number(value.count);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error("contextCompaction: state.count must be a non-negative integer");
+  }
+  let last = null;
+  if (value.last !== null && value.last !== undefined) {
+    if (typeof value.last !== "object") {
+      throw new Error("contextCompaction: state.last must be an object or null");
+    }
+    const l = value.last;
+    last = {
+      compactionId: typeof l.compactionId === "string" ? l.compactionId : "",
+      seq: typeof l.seq === "number" ? l.seq : -1,
+      shadowedTokenCount: l.shadowedTokenCount == null ? null : Number(l.shadowedTokenCount),
+      provider: l.provider == null ? null : String(l.provider),
+      model: l.model == null ? null : String(l.model),
+      maxTokens: l.maxTokens == null ? null : Number(l.maxTokens),
+      shadowedStart: l.shadowedStart == null ? null : Number(l.shadowedStart),
+      shadowedEnd: l.shadowedEnd == null ? null : Number(l.shadowedEnd),
+    };
+  }
+  let routed = null;
+  if (value.routed !== null && value.routed !== undefined) {
+    if (typeof value.routed !== "object") {
+      throw new Error("contextCompaction: state.routed must be an object or null");
+    }
+    const r = value.routed;
+    if (typeof r.provider !== "string" || r.provider === "" || typeof r.model !== "string" || r.model === "") {
+      throw new Error("contextCompaction: state.routed must carry non-empty provider/model");
+    }
+    routed = {
+      provider: r.provider,
+      model: r.model,
+      contextWindow: typeof r.contextWindow === "number" && Number.isFinite(r.contextWindow) ? r.contextWindow : null,
+    };
+  }
+  return { count, last, routed };
 }
 
 /**
@@ -70,12 +150,29 @@ function parse(value) {
 function makeUnit() {
   return {
     key: "contextCompaction",
-    init: () => ({ count: 0, last: null }),
+    init: () => ({ count: 0, last: null, routed: null }),
     apply: (state, event) => {
+      // The routed target the trigger measures against: the engine resolves
+      // its policy and capacity from exactly this provider/model pair.
+      if (event.type === "request/context") {
+        const d = event.data ?? {};
+        if (typeof d.provider !== "string" || d.provider === "" || typeof d.model !== "string" || d.model === "") {
+          return state;
+        }
+        return {
+          ...state,
+          routed: {
+            provider: d.provider,
+            model: d.model,
+            contextWindow: typeof d.contextWindow === "number" ? d.contextWindow : null,
+          },
+        };
+      }
       if (event.type !== "compaction/summary") return state;
       const d = event.data ?? {};
       const range = d.shadowedRange ?? {};
       return {
+        ...state,
         count: state.count + 1,
         last: {
           compactionId: typeof d.compactionId === "string" ? d.compactionId : "",
@@ -100,10 +197,51 @@ function makeUnit() {
         compactionCount: state.count,
         compressed: state.count > 0,
         lastCompaction: state.last,
+        routed: state.routed,
       }),
     },
-    stateVersion: 1,
+    stateSchema: { parse: parseState },
+    // v2: state gained `routed` (last request/context). v1 rows are unusable
+    // by design and refold from `init` over the full durable log.
+    stateVersion: 2,
   };
+}
+
+// ---- auto-compaction threshold (dsh default policy mirror) -----------------
+
+/**
+ * dsh's documented default compaction policy (`dsh-compaction-basic`
+ * `resolveConfig` defaults). On the web surface `dsh-web-app`'s bundle patch
+ * DISABLES the host-plane `compaction-basic` row and every agent preset
+ * mounts it inside an isolated per-session realm, so the engine instance is
+ * unreachable from a host plugin: cordis injects all-or-nothing (a declared
+ * service that never appears keeps the fiber pending — the boot asserts
+ * activation and dies), and the sandbox rejects `ctx.get` of any service not
+ * declared in `inject`. These defaults are nonetheless the EFFECTIVE policy
+ * for this deployment: every shipped preset and the user's own presets mount
+ * `compaction-basic` with no config, and `resolveConfig` fills exactly these
+ * values. If a preset one day overrides `thresholdRatio`, this mirror goes
+ * stale — the bubble labels the percentage 默认 to keep that visible.
+ */
+const DEFAULT_THRESHOLD_RATIO = 0.8;
+
+/**
+ * Resolve the auto-compaction threshold for one session, mirroring
+ * `resolveTargetPolicy` + `resolveCompactSpec` in `dsh-compaction-basic`:
+ * the default `thresholdRatio` scaled by the routed target's context window.
+ * @param routed - the routed target from the projection (may be null before
+ *   the session's first request).
+ * @returns `{auto, ratio, tokens, contextWindow}`; `tokens`/`contextWindow`
+ *   are null until the session has a routed context window. A preset without
+ *   `compaction-basic` (e.g. data-agent) never compacts, so its displayed
+ *   threshold is declarative, not enforced.
+ */
+function resolveAutoCompaction(routed) {
+  const contextWindow = routed !== null && routed !== undefined && typeof routed.contextWindow === "number"
+    ? routed.contextWindow
+    : null;
+  const tokens = contextWindow !== null ? Math.floor(contextWindow * DEFAULT_THRESHOLD_RATIO) : null;
+  return { auto: true, ratio: DEFAULT_THRESHOLD_RATIO, tokens, contextWindow };
 }
 
 // ---- loopback HTTP route (mirrors dsh-archive-panel) -----------------------
@@ -142,12 +280,18 @@ function isLoopbackRequest(request) {
   }
 }
 
-const EMPTY = { compactionCount: 0, compressed: false, lastCompaction: null };
+const EMPTY = {
+  compactionCount: 0,
+  compressed: false,
+  lastCompaction: null,
+  routed: null,
+};
 
 /**
  * Build the route handler. Reads `?sessionId=`, resolves the session, and
- * returns its `contextCompaction` projection value (fail-soft to the empty
- * shape so the client never breaks on a missing session/projection).
+ * returns its `contextCompaction` projection value plus the effective
+ * auto-compaction threshold (fail-soft to the empty shape so the client never
+ * breaks on a missing session/projection/service).
  *
  * Resolution prefers the in-memory, attached session (`sessions.get` +
  * `sessionProjections.snapshot`) for live accuracy, and falls back to a cold
@@ -203,7 +347,8 @@ function makeStatusHandler(ctx) {
         `dsh-context-compression-status: resolve "${sessionId}" failed: ${String(error)}`,
       );
     }
-    writeJson(res, 200, { ok: true, ...value });
+    const autoCompaction = resolveAutoCompaction(value.routed);
+    writeJson(res, 200, { ok: true, ...value, autoCompaction });
   };
 }
 
@@ -224,4 +369,4 @@ function apply(ctx) {
   }, "dsh-context-compression-status: route");
 }
 
-export { apply, inject, name, makeUnit, makeStatusHandler };
+export { apply, inject, name, makeUnit, makeStatusHandler, resolveAutoCompaction, parseState };
