@@ -111,17 +111,17 @@ window.__ModuleLoader__.load({
       // floor(contextWindow × thresholdRatio). The engine lives in per-session
       // preset realms a host plugin cannot reach, so the route mirrors the
       // default policy (ratio 0.8) — hence the 默认 label on the percentage.
+      // Current usage is NOT repeated here; the 当前用量 line above has it.
       var ac = comp && comp.autoCompaction ? comp.autoCompaction : null;
       if (ac && typeof ac.tokens === "number" && ac.tokens > 0) {
         var parts = [];
         if (used != null) {
-          parts.push("当前 " + formatTokens(used));
           parts.push(
             "距压缩剩 " + (used >= ac.tokens ? "已到阈值" : formatTokens(ac.tokens - used)),
           );
         }
         parts.push(
-          "上限 " + formatTokens(ac.tokens) +
+          "触发上限 " + formatTokens(ac.tokens) +
           (typeof ac.ratio === "number" ? " (默认 " + Math.round(ac.ratio * 100) + "%)" : ""),
         );
         lines.push("自动压缩阈值: " + parts.join(" · "));

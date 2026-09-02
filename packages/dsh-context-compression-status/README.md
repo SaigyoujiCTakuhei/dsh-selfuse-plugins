@@ -8,11 +8,11 @@ GUI 本身已经能显示上下文上限与当前用量（来自核心 `contextP
 | --- | --- | --- |
 | 上下文上限 | `contextPressure.contextWindow` | 最近一次路由告知的模型上下文窗口 |
 | 当前已使用量 | `contextPressure.projectedTokens` | 下一次请求提示词的预估 token 数，压缩后会立刻反映 |
-| 自动压缩阈值 | `request/context`（经 HTTP 路由）+ 内置默认策略 | 触发点 = ⌊上下文窗口 × thresholdRatio⌋，按 dsh 默认 `thresholdRatio` 0.8 计算；气泡中显示 当前用量 · 距压缩剩余 · 触发上限（默认 80%） |
+| 自动压缩阈值 | `request/context`（经 HTTP 路由）+ 内置默认策略 | 触发点 = ⌊上下文窗口 × thresholdRatio⌋，按 dsh 默认 `thresholdRatio` 0.8 计算；气泡中显示 距压缩剩余 · 触发上限（默认 80%），当前用量由上面一行承担、不重复 |
 | 是否已被压缩 | `contextCompaction.compressed`（经 HTTP 路由） | 会话日志里是否出现过成功的 `compaction/summary` |
 | 压缩几次 | `contextCompaction.compactionCount`（经 HTTP 路由） | 成功压缩次数（`compaction/summary` 计数） |
 
-徽章常驻会话头部：未压缩时显示 `未压缩`，压缩过显示 `🗜 N×`（N 为次数）。鼠标悬停弹出完整明细：压缩状态、上下文上限、当前用量与占用百分比、自动压缩阈值（当前 / 距压缩剩余 / 触发上限，比例标注「默认」）、最近一次压缩缩减的 token 数及所用模型。
+徽章常驻会话头部：未压缩时显示 `未压缩`，压缩过显示 `🗜 N×`（N 为次数）。鼠标悬停弹出完整明细：压缩状态、上下文上限、当前用量与占用百分比、自动压缩阈值（距压缩剩余 / 触发上限，比例标注「默认」；当前用量不重复展示）、最近一次压缩缩减的 token 数及所用模型。
 
 ## 实现
 
