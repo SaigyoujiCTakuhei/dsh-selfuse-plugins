@@ -13,7 +13,7 @@
 
 ## 是什么
 
-这个仓库收集我在 dsh 上自用的插件。所有插件都走官方 profile 机制挂载到 `dsh web`，不改 dsh 源码；可以逐个安装，也可以一条命令装齐。插件的安装 / 检查更新 / 卸载由官方 `@linxin666/dsh-client-ui-plugin-manager`（设置 › 插件的 Plugin manager 标签页）负责，本仓库只提供下面的功能型插件。
+这个仓库收集我在 dsh 上自用的插件。所有插件都走官方 profile 机制挂载到 `dsh web`，不改 dsh 源码；插件相互独立、可只装其一，也可以一条命令装齐。插件的安装 / 检查更新 / 卸载由官方 `@linxin666/dsh-client-ui-plugin-manager`（设置 › 插件的 Plugin manager 标签页）负责，本仓库只提供下面的功能型插件。
 
 | 插件 | 作用 |
 | --- | --- |
@@ -73,7 +73,7 @@ Web GUI 右下角的常驻浮动按钮：一键优雅退出 dsh，与在终端�
 
 ## 快速开始
 
-前置条件：官方 `dsh` CLI、`pnpm`；其中 `dsh-everything-plugin` 仅支持 Windows，且需要本机正在运行 voidtools Everything。
+前置条件：官方 `dsh` CLI、`pnpm`；其中 `dsh-everything-plugin` 仅支持 Windows，且需要本机正在运行 voidtools Everything。插件随 dsh 0.1.x 迭代开发，dsh 大版本升级后如遇接口变更，以官方文档为准。
 
 单个安装：
 
