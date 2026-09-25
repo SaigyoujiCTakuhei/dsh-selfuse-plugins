@@ -10,7 +10,8 @@
  *   peak    09:00–12:00 and 14:00–18:00 (Asia/Shanghai)
  *   offpeak everything else
  *
- * Peak is exactly 2× off-peak in DeepSeek's 2026-08-17 tariff. Currency is CNY
+ * Peak is exactly 2× off-peak in DeepSeek's current tariff (V4.1-Flash
+ * repricing, verified 2026-09-26). Currency is CNY
  * and the browser half renders `¥`. The fold reuses token-meter's disjoint
  * usage buckets and its "replace the same (turn, step) sample instead of
  * double-counting" rule.
@@ -29,7 +30,7 @@ const inject = ["sessionProjections"];
 const PER = 1_000_000;
 
 const DEFAULT_PRICING = {
-  version: 3,
+  version: 4,
   currency: "CNY",
   per: PER,
   timezone: "Asia/Shanghai",
@@ -49,13 +50,20 @@ const DEFAULT_PRICING = {
       offpeak: { input: 4.5, output: 13.5, cacheRead: 0.15, cacheWrite: 0 },
       peak: { input: 9.0, output: 27.0, cacheRead: 0.3, cacheWrite: 0 },
     },
+    // deepseek-flash = DeepSeek-V4.1-Flash, the current cheap-tier alias.
+    "deepseek-official/deepseek-flash": {
+      offpeak: { input: 1.0, output: 4.0, cacheRead: 0.02, cacheWrite: 0 },
+      peak: { input: 2.0, output: 8.0, cacheRead: 0.04, cacheWrite: 0 },
+    },
+    // Legacy aliases: retired per the 2026-09 tariff but still callable and
+    // billed at Flash (V4.1-Flash) prices, so they share its table.
     "deepseek-official/deepseek-v4-flash": {
-      offpeak: { input: 1.5, output: 4.5, cacheRead: 0.05, cacheWrite: 0 },
-      peak: { input: 3.0, output: 9.0, cacheRead: 0.1, cacheWrite: 0 },
+      offpeak: { input: 1.0, output: 4.0, cacheRead: 0.02, cacheWrite: 0 },
+      peak: { input: 2.0, output: 8.0, cacheRead: 0.04, cacheWrite: 0 },
     },
     "deepseek-official/deepseek-v4-flash-vision-exp": {
-      offpeak: { input: 1.5, output: 4.5, cacheRead: 0.05, cacheWrite: 0 },
-      peak: { input: 3.0, output: 9.0, cacheRead: 0.1, cacheWrite: 0 },
+      offpeak: { input: 1.0, output: 4.0, cacheRead: 0.02, cacheWrite: 0 },
+      peak: { input: 2.0, output: 8.0, cacheRead: 0.04, cacheWrite: 0 },
     },
   },
   // GLM Coding Plan (bigmodel.cn) billing: subscription credit quota, not CNY.
